@@ -7,6 +7,11 @@ plugins {
 android {
     namespace = "com.voiceassistant"
     compileSdk = 35
+    sourceSets {
+        getByName("main") {
+            assets.srcDirs("src/main/assets")
+        }
+    }
 
     defaultConfig {
         applicationId = "com.voiceassistant"
