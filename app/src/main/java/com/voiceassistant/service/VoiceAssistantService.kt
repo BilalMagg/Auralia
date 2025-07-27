@@ -1,8 +1,5 @@
 package com.voiceassistant.service
 
-import ai.picovoice.porcupine.PorcupineException
-import ai.picovoice.porcupine.PorcupineManager
-import ai.picovoice.porcupine.PorcupineManagerCallback
 import android.app.*
 import android.content.Context
 import android.content.Intent
@@ -18,44 +15,73 @@ import androidx.core.content.ContextCompat
 import com.voiceassistant.MainActivity
 import com.voiceassistant.R
 import com.voiceassistant.commands.CommandProcessor
+import com.voiceassistant.wakeword.AudioWakeWordDetector
 import java.util.*
 
-class VoiceAssistantService : Service(), TextToSpeech.OnInitListener, PorcupineManagerCallback {
+class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
 
-    private lateinit var porcupineManager: PorcupineManager
+    private lateinit var wakeWordDetector: AudioWakeWordDetector
     private lateinit var speechRecognizer: SpeechRecognizer
     private lateinit var textToSpeech: TextToSpeech
     private lateinit var commandProcessor: CommandProcessor
 
     private var isListeningForCommand = false
-    private var isPorcupineInitialized = false
+    private var isWakeWordDetectorInitialized = false
+    private var wakeWordCallback: ((Boolean) -> Unit)? = null
+    private var audioDetectionCallback: ((Boolean) -> Unit)? = null
+
+    private lateinit var handlerThread: HandlerThread
+    private lateinit var serviceHandler: Handler
 
     companion object {
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "VoiceAssistantChannel"
-        private const val PORCUPINE_ACCESS_KEY = "RjAS5pYfRnWFF/oRmXAbSQV25wrP8tVzyaz+UUIVVphZDYjgSVuuLg=="
         private const val TAG = "VoiceAssistantService"
         private const val REQUEST_RECORD_AUDIO_PERMISSION = 101
+    }
+
+    // Binder pour exposer le service à l'activité
+    inner class LocalBinder : Binder() {
+        fun getService(): VoiceAssistantService = this@VoiceAssistantService
+        
+        fun setWakeWordCallback(callback: (Boolean) -> Unit) {
+            wakeWordCallback = callback
+        }
+        
+        fun setAudioDetectionCallback(callback: (Boolean) -> Unit) {
+            audioDetectionCallback = callback
+        }
+    }
+
+    private val binder = LocalBinder()
+
+    override fun onBind(intent: Intent?): IBinder? {
+        return binder
     }
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service onCreate")
 
-        // Initialisation TTS
+        handlerThread = HandlerThread("VoiceAssistantThread")
+        handlerThread.start()
+        serviceHandler = Handler(handlerThread.looper)
+
         textToSpeech = TextToSpeech(this, this)
         commandProcessor = CommandProcessor(this, textToSpeech)
 
-        // Création du canal de notification
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
 
-        // Vérification des permissions avant d'initialiser Porcupine
         if (checkAudioPermission()) {
-            initializePorcupine()
-            initializeSpeechRecognizer()
+            // Initialize TensorFlow wake word detector
+            initializeWakeWordDetector()
+            // Initialize SpeechRecognizer on main thread (UI)
+            Handler(Looper.getMainLooper()).post {
+                initializeSpeechRecognizer()
+            }
         } else {
-            Log.e(TAG, "Permissions audio manquantes")
+            Log.e(TAG, "Audio permissions missing")
             speakText("Audio permissions required")
         }
     }
@@ -91,7 +117,7 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener, PorcupineM
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Voice Assistant Active")
-            .setContentText("Say 'Hey Gemma' to activate")
+            .setContentText("Say 'Hi Aura' to activate")
             .setSmallIcon(R.drawable.ic_mic)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -99,24 +125,50 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener, PorcupineM
             .build()
     }
 
-    private fun initializePorcupine() {
+    private fun initializeWakeWordDetector() {
         try {
-            // Vérification que le fichier .ppn existe dans assets
-            assets.open("hey-gemma_en_android_v3_0_0.ppn").close()
-
-            porcupineManager = PorcupineManager.Builder()
-                .setAccessKey(PORCUPINE_ACCESS_KEY)
-                .setKeywordPath("hey-gemma_en_android_v3_0_0.ppn") // Fichier dans assets/
-                .setSensitivity(0.7f) // Sensibilité ajustée
-                .build(applicationContext, this)
-
-            porcupineManager.start()
-            isPorcupineInitialized = true
-            Log.d(TAG, "Porcupine initialized successfully")
+            wakeWordDetector = AudioWakeWordDetector(
+                context = this,
+                onWakeWordDetected = {
+                    // Wake word detected callback
+                    onWakeWordDetected()
+                },
+                onAudioDetected = { detected ->
+                    // Audio detection callback
+                    audioDetectionCallback?.invoke(detected)
+                }
+            )
+            
+            wakeWordDetector.initialize()
+            isWakeWordDetectorInitialized = true
+            
+            // Start listening for wake word
+            serviceHandler.post {
+                wakeWordDetector.startListening()
+            }
+            
+            Log.d(TAG, "Audio wake word detector initialized successfully")
+            speakText("Wake word detection is now active. Say Hi Aura to start")
         } catch (e: Exception) {
-            Log.e(TAG, "Porcupine initialization failed: ${e.message}")
-            speakText("Wake word initialization failed")
-            isPorcupineInitialized = false
+            Log.e(TAG, "Wake word detector initialization failed: ${e.message}")
+            e.printStackTrace()
+            speakText("Wake word initialization failed: ${e.message}")
+            isWakeWordDetectorInitialized = false
+        }
+    }
+
+    private fun onWakeWordDetected() {
+        Log.d(TAG, "Wake word detected!")
+        
+        // Notify MainActivity about wake word detection
+        Handler(Looper.getMainLooper()).post {
+            wakeWordCallback?.invoke(true)
+        }
+        
+        if (!isListeningForCommand) {
+            isListeningForCommand = true
+            speakText("Yes, I'm listening")
+            startListeningForCommand()
         }
     }
 
@@ -152,6 +204,9 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener, PorcupineM
                 }
                 Log.e(TAG, "Speech recognition error: $errorMsg")
                 speakText("Error: $errorMsg")
+                
+                // Restart wake word detection after error
+                restartWakeWordDetection()
             }
 
             override fun onResults(results: Bundle?) {
@@ -163,6 +218,8 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener, PorcupineM
                         commandProcessor.processCommand(command)
                     }
                 }
+                // Restart wake word detection after processing
+                restartWakeWordDetection()
             }
 
             override fun onPartialResults(partialResults: Bundle?) {}
@@ -171,23 +228,26 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener, PorcupineM
         })
     }
 
-    override fun invoke(keywordIndex: Int) {
-        Log.d(TAG, "Wake word detected")
-        if (!isListeningForCommand) {
-            isListeningForCommand = true
-            speakText("Yes, I'm listening")
-            startListeningForCommand()
+    private fun restartWakeWordDetection() {
+        if (isWakeWordDetectorInitialized) {
+            try {
+                wakeWordDetector.startListening()
+                Log.d(TAG, "Wake word detection restarted")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error restarting wake word detection: ${e.message}")
+            }
         }
     }
 
     private fun startListeningForCommand() {
-        if (!isPorcupineInitialized) {
-            Log.e(TAG, "Porcupine not initialized")
+        if (!isWakeWordDetectorInitialized) {
+            Log.e(TAG, "Wake word detector not initialized")
             return
         }
 
         try {
-            porcupineManager.stop() // Arrête temporairement Porcupine pendant la reconnaissance
+            // Stop wake word detection temporarily to listen for command
+            wakeWordDetector.stopListening()
             Handler(Looper.getMainLooper()).postDelayed({
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -199,7 +259,54 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener, PorcupineM
             }, 300)
         } catch (e: Exception) {
             Log.e(TAG, "Error starting speech recognition: ${e.message}")
+            restartWakeWordDetection()
         }
+    }
+
+    fun testSpeechRecognition() {
+        if (!isWakeWordDetectorInitialized) {
+            speakText("Wake word detector is not initialized")
+            return
+        }
+
+        if (isListeningForCommand) {
+            speakText("Already listening")
+            return
+        }
+
+        isListeningForCommand = true
+        speakText("Testing speech recognition")
+        startListeningForCommand()
+    }
+
+    fun testWakeWordDetection() {
+        if (!isWakeWordDetectorInitialized) {
+            speakText("Wake word detector is not initialized")
+            return
+        }
+        
+        speakText("Testing wake word detection. Say Hi Aura now")
+        Log.d(TAG, "Wake word detection test started")
+    }
+
+    fun getWakeWordStatus(): String {
+        return if (isWakeWordDetectorInitialized) {
+            "Audio wake word detector is initialized and listening"
+        } else {
+            "Wake word detector is not initialized"
+        }
+    }
+
+    fun getDetailedStatus(): String {
+        val status = StringBuilder()
+        status.append("Service Status:\n")
+        status.append("- Wake word detector initialized: $isWakeWordDetectorInitialized\n")
+        status.append("- Listening for command: $isListeningForCommand\n")
+        status.append("- Audio permission: ${checkAudioPermission()}\n")
+        status.append("- Wake word: Hi Aura (Audio Detection)\n")
+        status.append("- Detector listening: ${wakeWordDetector.isListening()}\n")
+        
+        return status.toString()
     }
 
     private fun speakText(text: String) {
@@ -223,19 +330,16 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener, PorcupineM
         }
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
-
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "Service onDestroy")
 
         try {
-            if (::porcupineManager.isInitialized && isPorcupineInitialized) {
-                porcupineManager.stop()
-                porcupineManager.delete()
+            if (::wakeWordDetector.isInitialized) {
+                wakeWordDetector.destroy()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error stopping Porcupine: ${e.message}")
+            Log.e(TAG, "Error destroying wake word detector: ${e.message}")
         }
 
         if (::speechRecognizer.isInitialized) {
@@ -245,6 +349,10 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener, PorcupineM
         if (::textToSpeech.isInitialized) {
             textToSpeech.stop()
             textToSpeech.shutdown()
+        }
+
+        if (::handlerThread.isInitialized) {
+            handlerThread.quitSafely()
         }
     }
 }
