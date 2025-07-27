@@ -127,33 +127,29 @@ class VoiceAssistantService : Service(), TextToSpeech.OnInitListener {
 
     private fun initializeWakeWordDetector() {
         try {
+            Log.d(TAG, "Initializing wake word detector...")
             wakeWordDetector = AudioWakeWordDetector(
                 context = this,
                 onWakeWordDetected = {
                     // Wake word detected callback
+                    Log.d(TAG, "Wake word detected in service!")
                     onWakeWordDetected()
                 },
                 onAudioDetected = { detected ->
                     // Audio detection callback
+                    Log.d(TAG, "Audio detection callback: $detected")
                     audioDetectionCallback?.invoke(detected)
                 }
             )
             
             wakeWordDetector.initialize()
+            wakeWordDetector.startListening()
             isWakeWordDetectorInitialized = true
+            Log.d(TAG, "Wake word detector initialized and started successfully")
             
-            // Start listening for wake word
-            serviceHandler.post {
-                wakeWordDetector.startListening()
-            }
-            
-            Log.d(TAG, "Audio wake word detector initialized successfully")
-            speakText("Wake word detection is now active. Say Hi Aura to start")
         } catch (e: Exception) {
-            Log.e(TAG, "Wake word detector initialization failed: ${e.message}")
+            Log.e(TAG, "Failed to initialize wake word detector: ${e.message}")
             e.printStackTrace()
-            speakText("Wake word initialization failed: ${e.message}")
-            isWakeWordDetectorInitialized = false
         }
     }
 

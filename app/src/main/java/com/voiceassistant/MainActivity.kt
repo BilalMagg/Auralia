@@ -3,6 +3,9 @@ package com.voiceassistant
 import android.Manifest
 import android.content.*
 import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.os.*
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -10,6 +13,7 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.widget.Toast
+import kotlin.math.sqrt
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -131,6 +135,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                         onSpeakInstructions = { speakInstructions() },
                         onTestSpeechRecognition = { testSpeechRecognition() },
                         onTestWakeWordDetection = { testWakeWordDetection() },
+                        onTestMicrophone = { testMicrophone() },
                         onShowDetailedStatus = { showDetailedStatus() }
                     )
                 }
@@ -331,6 +336,75 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             Toast.makeText(this, "Service not bound. Start the assistant first.", Toast.LENGTH_SHORT).show()
         }
     }
+
+    private fun testMicrophone() {
+        if (!hasRecordAudioPermission()) {
+            Toast.makeText(this, "Microphone permission required", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        Toast.makeText(this, "Testing microphone... Speak now!", Toast.LENGTH_SHORT).show()
+        
+        // Simple microphone test using AudioRecord
+        Thread {
+            try {
+                val sampleRate = 16000
+                val channelConfig = AudioFormat.CHANNEL_IN_MONO
+                val audioFormat = AudioFormat.ENCODING_PCM_FLOAT
+                val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat) * 2
+                
+                val audioRecord = AudioRecord(
+                    MediaRecorder.AudioSource.MIC,
+                    sampleRate,
+                    channelConfig,
+                    audioFormat,
+                    bufferSize
+                )
+                
+                if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
+                    runOnUiThread {
+                        Toast.makeText(this, "Microphone test failed: Not initialized", Toast.LENGTH_LONG).show()
+                    }
+                    return@Thread
+                }
+                
+                audioRecord.startRecording()
+                val buffer = FloatArray(1024)
+                var maxLevel = 0f
+                
+                // Record for 3 seconds
+                for (i in 0 until 30) {
+                    val readSize = audioRecord.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
+                    if (readSize > 0) {
+                        var sum = 0f
+                        for (j in 0 until readSize) {
+                            sum += buffer[j] * buffer[j]
+                        }
+                        val rms = sqrt(sum / readSize)
+                        if (rms > maxLevel) maxLevel = rms
+                    }
+                    Thread.sleep(100)
+                }
+                
+                audioRecord.stop()
+                audioRecord.release()
+                
+                runOnUiThread {
+                    val message = if (maxLevel > 0.01f) {
+                        "Microphone working! Max level: ${String.format("%.4f", maxLevel)}"
+                    } else {
+                        "Microphone test: No audio detected (level: ${String.format("%.6f", maxLevel)})"
+                    }
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                }
+                
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this, "Microphone test error: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
 }
 
 @Composable
@@ -344,6 +418,7 @@ fun MainScreen(
     onSpeakInstructions: () -> Unit,
     onTestSpeechRecognition: () -> Unit,
     onTestWakeWordDetection: () -> Unit,
+    onTestMicrophone: () -> Unit,
     onShowDetailedStatus: () -> Unit
 ) {
     Column(
@@ -429,6 +504,20 @@ fun MainScreen(
                         }
                 ) {
                     Text("Test Wake Word Detection")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Test microphone directly
+                OutlinedButton(
+                    onClick = onTestMicrophone,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics {
+                            contentDescription = "Test microphone directly"
+                        }
+                ) {
+                    Text("Test Microphone")
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))

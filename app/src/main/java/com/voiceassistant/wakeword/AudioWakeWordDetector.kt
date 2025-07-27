@@ -26,8 +26,8 @@ class AudioWakeWordDetector(
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
         private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_FLOAT
         private const val AUDIO_CHUNK_SIZE = 1024
-        private const val DETECTION_THRESHOLD = 0.1f
-        private const val ZERO_CROSSING_THRESHOLD = 0.05f
+        private const val DETECTION_THRESHOLD = 0.02f  // Lowered from 0.05f
+        private const val ZERO_CROSSING_THRESHOLD = 0.1f
     }
     
     private val BUFFER_SIZE = AudioRecord.getMinBufferSize(
@@ -36,7 +36,11 @@ class AudioWakeWordDetector(
 
     fun initialize() {
         try {
-            Log.d(TAG, "Audio Wake Word Detector initialized")
+            Log.d(TAG, "Initializing AudioWakeWordDetector...")
+            Log.d(TAG, "Buffer size: $BUFFER_SIZE")
+            Log.d(TAG, "Detection threshold: $DETECTION_THRESHOLD")
+            Log.d(TAG, "Zero crossing threshold: $ZERO_CROSSING_THRESHOLD")
+            Log.d(TAG, "Audio Wake Word Detector initialized successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize Audio detector: ${e.message}")
         }
@@ -44,9 +48,14 @@ class AudioWakeWordDetector(
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     fun startListening() {
-        if (isListening) return
+        if (isListening) {
+            Log.d(TAG, "Already listening, skipping start")
+            return
+        }
         
         try {
+            Log.d(TAG, "Starting simple audio detection...")
+            
             audioRecord = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
                 SAMPLE_RATE,
@@ -60,35 +69,63 @@ class AudioWakeWordDetector(
                 return
             }
 
+            Log.d(TAG, "AudioRecord initialized successfully")
             audioRecord?.startRecording()
             isListening = true
 
             detectionThread = Thread {
                 val buffer = FloatArray(AUDIO_CHUNK_SIZE)
+                var silenceFrames = 0
+                var speechFrames = 0
 
+                Log.d(TAG, "Simple detection thread started")
+                
                 while (isListening) {
-                    val readSize = audioRecord?.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING) ?: 0
-                    
-                    if (readSize > 0) {
-                        // Calculate audio level
-                        val rms = calculateRMS(buffer, readSize)
+                    try {
+                        val readSize = audioRecord?.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING) ?: 0
                         
-                        // Simple wake word detection based on audio level and pattern
-                        if (detectWakeWordPattern(buffer, readSize)) {
-                            Log.d(TAG, "Wake word detected!")
-                            onWakeWordDetected()
-                            // Add a small delay to prevent multiple detections
-                            Thread.sleep(2000)
+                        if (readSize > 0) {
+                            val rms = calculateRMS(buffer, readSize)
+                            
+                            // Very simple detection: any significant audio = wake word
+                            if (rms > 0.005f) {  // Low threshold to detect any speech
+                                speechFrames++
+                                silenceFrames = 0
+                                onAudioDetected?.invoke(true)
+                                
+                                Log.d(TAG, "Speech detected! RMS: ${String.format("%.6f", rms)}")
+                                
+                                // If we have enough consecutive speech frames, trigger wake word
+                                if (speechFrames >= 5) {
+                                    Log.d(TAG, "🎉 WAKE WORD TRIGGERED! (Speech detected)")
+                                    onWakeWordDetected()
+                                    speechFrames = 0
+                                    Thread.sleep(3000) // Wait 3 seconds before next detection
+                                }
+                            } else {
+                                silenceFrames++
+                                speechFrames = 0
+                                
+                                if (silenceFrames > 20) {
+                                    onAudioDetected?.invoke(false)
+                                }
+                            }
                         }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error reading audio: ${e.message}")
+                        break
                     }
                 }
+                
+                Log.d(TAG, "Detection thread ended")
             }
             
             detectionThread?.start()
-            Log.d(TAG, "Started listening for wake word")
+            Log.d(TAG, "Simple wake word detection started")
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error starting wake word detection: ${e.message}")
+            Log.e(TAG, "Error starting detection: ${e.message}")
+            e.printStackTrace()
         }
     }
 
@@ -117,44 +154,14 @@ class AudioWakeWordDetector(
     }
 
     private fun detectWakeWordPattern(buffer: FloatArray, size: Int): Boolean {
-        // Simple pattern detection for "Hi Aura"
-        // This detects speech-like patterns based on audio characteristics
-        
+        // Simplified wake word detection - just check for significant audio
         val rms = calculateRMS(buffer, size)
         
-        // Check for significant audio activity
-        if (rms > DETECTION_THRESHOLD) {
-            // Look for a pattern that might indicate speech
-            var zeroCrossings = 0
-            for (i in 1 until size) {
-                if ((buffer[i] >= 0 && buffer[i - 1] < 0) || 
-                    (buffer[i] < 0 && buffer[i - 1] >= 0)) {
-                    zeroCrossings++
-                }
-            }
-            
-            // Speech typically has many zero crossings
-            val zeroCrossingRate = zeroCrossings.toFloat() / size
-            
-            // Check for speech-like characteristics
-            val isSpeechLike = zeroCrossingRate > ZERO_CROSSING_THRESHOLD && rms > 0.05f
-            
-            // Log audio levels for debugging
-            if (rms > 0.05f) {
-                Log.d(TAG, "Audio detected - RMS: ${String.format("%.4f", rms)}, Zero crossings: ${String.format("%.4f", zeroCrossingRate)}")
-                onAudioDetected?.invoke(true)
-            } else {
-                onAudioDetected?.invoke(false)
-            }
-            
-            if (isSpeechLike) {
-                Log.d(TAG, "🎤 SPEECH DETECTED! - RMS: ${String.format("%.4f", rms)}, Zero crossings: ${String.format("%.4f", zeroCrossingRate)}")
-            }
-            
-            return isSpeechLike
-        }
+        // Log the detection attempt
+        Log.d(TAG, "Checking wake word pattern - RMS: ${String.format("%.6f", rms)}")
         
-        return false
+        // Simple threshold-based detection
+        return rms > 0.01f
     }
 
     fun isListening(): Boolean = isListening
