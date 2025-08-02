@@ -20,8 +20,11 @@ fun LlamaScreen(
     val vm: LlamaViewModel = viewModel()
     val result by vm.response.collectAsState()
     val isLoading by vm.isLoading.collectAsState()
+    val useStreaming by vm.useStreaming.collectAsState()
+    val selectedModel by vm.selectedModel.collectAsState()
 
     var prompt by remember { mutableStateOf("") }
+    var showModelSelector by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -49,7 +52,72 @@ fun LlamaScreen(
             Spacer(modifier = Modifier.width(48.dp)) // Balance the layout
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Settings Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Model Selector
+            OutlinedButton(
+                onClick = { showModelSelector = true },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Model: $selectedModel", color = Color.Black)
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // Streaming Toggle
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Streaming",
+                    color = Color.Black,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                Switch(
+                    checked = useStreaming,
+                    onCheckedChange = { vm.toggleStreaming() }
+                )
+            }
+        }
+
+        // Model Selection Dialog
+        if (showModelSelector) {
+            AlertDialog(
+                onDismissRequest = { showModelSelector = false },
+                title = { Text("Select Model", color = Color.Black) },
+                text = {
+                    Column {
+                        listOf("gemma3n:e2b", "llama3.2", "mistral", "codellama").forEach { model ->
+                            TextButton(
+                                onClick = {
+                                    vm.setModel(model)
+                                    showModelSelector = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = model,
+                                    color = if (selectedModel == model) Color.Blue else Color.Black
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showModelSelector = false }) {
+                        Text("Cancel", color = Color.Black)
+                    }
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
             value = prompt,
@@ -84,7 +152,7 @@ fun LlamaScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
             }
-            Text(if (isLoading) "Sending..." else "Send to Gemma")
+            Text(if (isLoading) "Sending..." else "Send to ${selectedModel}")
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -99,12 +167,25 @@ fun LlamaScreen(
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
-                    Text(
-                        text = "Response:",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Response:",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        if (useStreaming) {
+                            Text(
+                                text = "Streaming",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
                     Text(
                         text = result,
                         style = MaterialTheme.typography.bodyLarge,
