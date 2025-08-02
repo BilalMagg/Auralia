@@ -34,7 +34,9 @@ fun MainAssistantScreen(
     onManageApps: () -> Unit = {},
     onWebNavigation: () -> Unit = {},
     onMenuClick: () -> Unit = {},
-    onProfileClick: () -> Unit = {}
+    onProfileClick: () -> Unit = {},
+    onTestClick: () -> Unit = {},
+    onLlamaClick: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier
@@ -173,6 +175,31 @@ fun MainAssistantScreen(
                             onClick = onWebNavigation
                         )
                     }
+                    item {
+                        CustomCommandCard(
+                            iconRes = R.drawable.ic_mic,
+                            title = "Gemma\nChat",
+                            onClick = onLlamaClick
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Test button for accessibility automation
+                Button(
+                    onClick = onTestClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF6C5CE7)
+                    )
+                ) {
+                    Text(
+                        text = "Test Simple Click",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
         }
