@@ -3,7 +3,6 @@ package com.voiceassistant
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -13,7 +12,6 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,8 +30,6 @@ import com.voiceassistant.ui.screens.MainAssistantScreen
 import com.voiceassistant.ui.screens.SettingsScreen
 import com.voiceassistant.ui.screens.HistoryScreen
 import com.voiceassistant.ui.screens.VoiceCommand
-import com.voiceassistant.ui.screens.LlamaScreen
-import com.voiceassistant.accessibility.VoiceAssistantAccessibilityService
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     
@@ -41,7 +37,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private var isServiceRunning by mutableStateOf(false)
     private var currentScreen by mutableStateOf("welcome")
     private var isListening by mutableStateOf(false)
-    @RequiresApi(Build.VERSION_CODES.O)
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -53,7 +48,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
     }
     
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d("DebugTest", "MainActivity onCreate called")
@@ -77,9 +71,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             onManageApps = { handleManageApps() },
                             onWebNavigation = { handleWebNavigation() },
                             onMenuClick = { handleMenuClick() },
-                            onProfileClick = { handleProfileClick() },
-                            onTestClick = { testSimpleClick() },
-                            onLlamaClick = { handleLlamaClick() }
+                            onProfileClick = { handleProfileClick() }
                         )
                     }
                     "settings" -> {
@@ -105,14 +97,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             onEditCommand = { command -> handleEditCommand(command) }
                         )
                     }
-                    "llama" -> {
-                        LlamaScreen(
-                            onBackClick = {
-                                currentScreen = "main"
-                                speakText("Returning to main screen")
-                            }
-                        )
-                    }
                 }
             }
         }
@@ -127,7 +111,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }, 3000)
     }
     
-    @RequiresApi(Build.VERSION_CODES.O)
     private fun checkPermissions() {
         val permissions = arrayOf(
             Manifest.permission.RECORD_AUDIO,
@@ -148,7 +131,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
     }
     
-    @RequiresApi(Build.VERSION_CODES.O)
     private fun startVoiceAssistantService() {
         val intent = Intent(this, VoiceAssistantService::class.java)
         startForegroundService(intent)
@@ -165,7 +147,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         speakText("Voice assistant stopped")
     }
     
-    @RequiresApi(Build.VERSION_CODES.O)
     private fun toggleService() {
         if (isServiceRunning) {
             stopVoiceAssistantService()
@@ -274,31 +255,6 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         speakText("Editing command")
         Toast.makeText(this, "Editing: ${command.command}", Toast.LENGTH_SHORT).show()
         // Ici vous pouvez ajouter la logique pour éditer la commande
-    }
-
-    private fun handleLlamaClick() {
-        currentScreen = "llama"
-        speakText("Opening Gemma chat")
-    }
-
-    // Test function to trigger mock accessibility automation
-    private fun testAccessibilityAutomation() {
-        speakText("Testing accessibility automation")
-        Toast.makeText(this, "Testing Accessibility Automation", Toast.LENGTH_SHORT).show()
-        
-        // This is a simple way to test - in a real app, you'd have a reference to your service
-        // For now, we'll just log that the test was triggered
-        Log.d("MainActivity", "Accessibility automation test triggered")
-        
-        // You can also add a button in your UI to call this function
-    }
-
-    // Test function to trigger simple click test
-    private fun testSimpleClick() {
-        speakText("Testing simple click automation")
-        Toast.makeText(this, "Testing Simple Click", Toast.LENGTH_SHORT).show()
-        Log.d("MainActivity", "Simple click test triggered")
-        Log.d("MainActivity", "Note: Accessibility service should be logging events automatically")
     }
     override fun onDestroy() {
         super.onDestroy()
