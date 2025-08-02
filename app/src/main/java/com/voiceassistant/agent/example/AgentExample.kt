@@ -53,7 +53,7 @@ class AgentExample(private val context: Context) {
         val previousActions = mutableListOf<Action>()
         
         // Simulate the automation loop
-        repeat(5) { iteration ->
+        for (iteration in 0 until 5) {
             Log.d("AgentExample", "=== Iteration $iteration ===")
             
             // 1. Create prompt for the model

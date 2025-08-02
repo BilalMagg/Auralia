@@ -18,7 +18,8 @@ class ActionParser {
      */
     fun parseModelResponse(jsonString: String): ModelResponse {
         return try {
-            val jsonObject = JsonParser.parseString(jsonString).asJsonObject
+            val jsonElement = gson.fromJson(jsonString, com.google.gson.JsonElement::class.java)
+            val jsonObject = jsonElement.asJsonObject
             val action = parseAction(jsonObject.getAsJsonObject("action"))
             val reasoning = jsonObject.get("reasoning")?.asString
             val confidence = jsonObject.get("confidence")?.asFloat ?: 1.0f

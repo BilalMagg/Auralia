@@ -7,7 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -168,7 +168,7 @@ fun AgentScreen(
                     containerColor = Color.Red
                 )
             ) {
-                Icon(Icons.Filled.Stop, contentDescription = null)
+                Icon(Icons.Filled.Close, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Stop")
             }
