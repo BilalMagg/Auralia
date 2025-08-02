@@ -36,7 +36,8 @@ fun MainAssistantScreen(
     onMenuClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
     onTestClick: () -> Unit = {},
-    onLlamaClick: () -> Unit = {}
+    onLlamaClick: () -> Unit = {},
+    onAgentClick: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier
@@ -180,6 +181,13 @@ fun MainAssistantScreen(
                             iconRes = R.drawable.ic_mic,
                             title = "Gemma\nChat",
                             onClick = onLlamaClick
+                        )
+                    }
+                    item {
+                        CustomCommandCard(
+                            iconRes = R.drawable.ic_web,
+                            title = "Voice\nAgent",
+                            onClick = onAgentClick
                         )
                     }
                 }
