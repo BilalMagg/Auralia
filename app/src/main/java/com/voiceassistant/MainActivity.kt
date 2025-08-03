@@ -33,6 +33,7 @@ import com.voiceassistant.ui.screens.SettingsScreen
 import com.voiceassistant.ui.screens.HistoryScreen
 import com.voiceassistant.ui.screens.VoiceCommand
 import com.voiceassistant.ui.screens.LlamaScreen
+import com.voiceassistant.ui.screens.AgentScreen
 import com.voiceassistant.accessibility.VoiceAssistantAccessibilityService
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
@@ -79,7 +80,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             onMenuClick = { handleMenuClick() },
                             onProfileClick = { handleProfileClick() },
                             onTestClick = { testSimpleClick() },
-                            onLlamaClick = { handleLlamaClick() }
+                            onLlamaClick = { handleLlamaClick() },
+                            onAgentClick = { handleAgentClick() }
                         )
                     }
                     "settings" -> {
@@ -107,6 +109,14 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     }
                     "llama" -> {
                         LlamaScreen(
+                            onBackClick = {
+                                currentScreen = "main"
+                                speakText("Returning to main screen")
+                            }
+                        )
+                    }
+                    "agent" -> {
+                        AgentScreen(
                             onBackClick = {
                                 currentScreen = "main"
                                 speakText("Returning to main screen")
@@ -279,6 +289,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun handleLlamaClick() {
         currentScreen = "llama"
         speakText("Opening Gemma chat")
+    }
+
+    private fun handleAgentClick() {
+        currentScreen = "agent"
+        speakText("Opening Voice Agent")
     }
 
     // Test function to trigger mock accessibility automation
