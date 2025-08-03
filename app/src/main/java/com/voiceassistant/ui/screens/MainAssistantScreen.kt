@@ -37,7 +37,8 @@ fun MainAssistantScreen(
     onProfileClick: () -> Unit = {},
     onTestClick: () -> Unit = {},
     onLlamaClick: () -> Unit = {},
-    onAgentClick: () -> Unit = {}
+    onAgentClick: () -> Unit = {},
+    onSpeechToTextClick: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier
@@ -188,6 +189,13 @@ fun MainAssistantScreen(
                             iconRes = R.drawable.ic_web,
                             title = "Voice\nAgent",
                             onClick = onAgentClick
+                        )
+                    }
+                    item {
+                        CustomCommandCard(
+                            iconRes = R.drawable.ic_mic,
+                            title = "Speech to\nText",
+                            onClick = onSpeechToTextClick
                         )
                     }
                 }

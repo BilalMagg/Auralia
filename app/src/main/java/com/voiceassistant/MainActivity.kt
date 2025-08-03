@@ -34,6 +34,7 @@ import com.voiceassistant.ui.screens.HistoryScreen
 import com.voiceassistant.ui.screens.VoiceCommand
 import com.voiceassistant.ui.screens.LlamaScreen
 import com.voiceassistant.ui.screens.AgentScreen
+import com.voiceassistant.ui.screens.SpeechToTextScreen
 import com.voiceassistant.accessibility.VoiceAssistantAccessibilityService
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
@@ -81,7 +82,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             onProfileClick = { handleProfileClick() },
                             onTestClick = { testSimpleClick() },
                             onLlamaClick = { handleLlamaClick() },
-                            onAgentClick = { handleAgentClick() }
+                            onAgentClick = { handleAgentClick() },
+                            onSpeechToTextClick = { handleSpeechToTextClick() }
                         )
                     }
                     "settings" -> {
@@ -120,6 +122,17 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             onBackClick = {
                                 currentScreen = "main"
                                 speakText("Returning to main screen")
+                            }
+                        )
+                    }
+                    "speechToText" -> {
+                        SpeechToTextScreen(
+                            onBackClick = {
+                                currentScreen = "main"
+                                speakText("Returning to main screen")
+                            },
+                            onTranscriptionComplete = { transcription ->
+                                speakText("Transcription completed: $transcription")
                             }
                         )
                     }
@@ -294,6 +307,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun handleAgentClick() {
         currentScreen = "agent"
         speakText("Opening Voice Agent")
+    }
+
+    private fun handleSpeechToTextClick() {
+        currentScreen = "speechToText"
+        speakText("Opening Speech to Text")
     }
 
     // Test function to trigger mock accessibility automation
