@@ -21,7 +21,7 @@ class LlamaRepository {
         .build()
 
     private val retrofit = Retrofit.Builder()
-        .baseUrl("http://192.168.1.116:11434/")
+        .baseUrl("http://192.168.8.103:11434/")
         .client(okHttpClient)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
