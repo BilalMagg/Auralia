@@ -36,6 +36,7 @@ import com.voiceassistant.ui.screens.LlamaScreen
 import com.voiceassistant.ui.screens.AgentScreen
 import com.voiceassistant.ui.screens.SpeechToTextScreen
 import com.voiceassistant.ui.screens.ServerConfigScreen
+import com.voiceassistant.ui.screens.ImageAnalysisScreen
 import com.voiceassistant.accessibility.VoiceAssistantAccessibilityService
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
@@ -84,7 +85,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             onTestClick = { testSimpleClick() },
                             onLlamaClick = { handleLlamaClick() },
                             onAgentClick = { handleAgentClick() },
-                            onSpeechToTextClick = { handleSpeechToTextClick() }
+                            onSpeechToTextClick = { handleSpeechToTextClick() },
+                            onImageAnalysisClick = { handleImageAnalysisClick() }
                         )
                     }
                     "settings" -> {
@@ -146,6 +148,14 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             }
                         )
                     }
+                    "imageAnalysis" -> {
+                        ImageAnalysisScreen(
+                            onBackClick = {
+                                currentScreen = "main"
+                                speakText("Returning to main screen")
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -167,7 +177,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             Manifest.permission.SEND_SMS,
             Manifest.permission.CALL_PHONE,
             Manifest.permission.READ_CONTACTS,
-            Manifest.permission.WRITE_CONTACTS
+            Manifest.permission.WRITE_CONTACTS,
+            Manifest.permission.CAMERA,
+            Manifest.permission.READ_EXTERNAL_STORAGE
         )
         
         val permissionsToRequest = permissions.filter {
@@ -327,6 +339,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun handleServerConfigClick() {
         currentScreen = "serverConfig"
         speakText("Opening server configuration")
+    }
+
+    private fun handleImageAnalysisClick() {
+        currentScreen = "imageAnalysis"
+        speakText("Opening image analysis")
     }
 
     // Test function to trigger mock accessibility automation

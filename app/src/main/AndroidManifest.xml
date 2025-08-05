@@ -12,6 +12,14 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" />
+    
+    <!-- Camera and storage permissions for image analysis -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    
+    <!-- Camera feature -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!-- Accessibility service permission -->
     <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" />
