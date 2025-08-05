@@ -12,10 +12,12 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import java.util.*
-
+import kotlinx.coroutines.*
+import com.voiceassistant.model.*
 class VoiceAssistantAccessibilityService : AccessibilityService(), TextToSpeech.OnInitListener {
 
     private lateinit var textToSpeech: TextToSpeech
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     companion object {
         var instance: VoiceAssistantAccessibilityService? = null
@@ -34,6 +36,7 @@ class VoiceAssistantAccessibilityService : AccessibilityService(), TextToSpeech.
         Log.d(TAG, "Service d'accessibilité connecté - Autoclick disponible")
         speakText("Service d'accessibilité Auralia activé")
     }
+
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event?.let { accessibilityEvent ->
@@ -599,6 +602,120 @@ class VoiceAssistantAccessibilityService : AccessibilityService(), TextToSpeech.
         } catch (e: Exception) {
             Log.e(TAG, "Erreur TTS: ${e.message}")
         }
+    }
+
+    /**
+     * Fonction principale pour exécuter une séquence d'actions - NOUVELLE MÉTHODE À AJOUTER
+     */
+    suspend fun executeActionSequence(sequence: ActionSequence): Boolean {
+        return withContext(Dispatchers.Main) {
+            Log.d(TAG, "🎯 Exécution séquence: ${sequence.description}")
+            speakText("Exécution des actions...")
+
+            var allSuccess = true
+
+            for ((index, action) in sequence.actions.withIndex()) {
+                Log.d(TAG, "Action ${index + 1}/${sequence.actions.size}: $action")
+                val success = executeAction(action)
+                if (!success) {
+                    allSuccess = false
+                    Log.e(TAG, "❌ Échec: $action")
+                } else {
+                    Log.d(TAG, "✅ Réussi: $action")
+                }
+
+                // Pause entre actions
+                delay(300)
+            }
+
+            val resultMessage = if (allSuccess) "Toutes les actions réussies" else "Certaines actions ont échoué"
+            Log.d(TAG, resultMessage)
+            speakText(resultMessage)
+
+            allSuccess
+        }
+    }
+
+
+    // Exécuter une action individuelle
+    /**
+     * Exécuter une action individuelle - NOUVELLE MÉTHODE À AJOUTER
+     */
+    private suspend fun executeAction(action: AccessibilityAction): Boolean {
+        return try {
+            when (action) {
+                is AccessibilityAction.Click -> {
+                    Log.d(TAG, "👆 Clic à (${action.x}, ${action.y})")
+                    performClickAtCoordinates(action.x.toFloat(), action.y.toFloat())
+                }
+                is AccessibilityAction.ClickOnText -> {
+                    Log.d(TAG, "👆 Clic sur texte: ${action.text}")
+                    clickOnTextElement(action.text)
+                }
+                is AccessibilityAction.Scroll -> {
+                    Log.d(TAG, "📜 Défilement: ${action.direction}")
+                    performScroll(action.direction.name)
+                }
+                is AccessibilityAction.Type -> {
+                    Log.d(TAG, "⌨️ Saisie: ${action.text}")
+                    typeTextInField(action.text)
+                }
+                is AccessibilityAction.Screenshot -> {
+                    Log.d(TAG, "📸 Capture d'écran")
+                    handleTakeScreenshot()
+                }
+                is AccessibilityAction.GoBack -> {
+                    Log.d(TAG, "⬅️ Retour")
+                    performGlobalAction(GLOBAL_ACTION_BACK)
+                }
+                is AccessibilityAction.GoHome -> {
+                    Log.d(TAG, "🏠 Accueil")
+                    performGlobalAction(GLOBAL_ACTION_HOME)
+                }
+                is AccessibilityAction.OpenNotifications -> {
+                    Log.d(TAG, "🔔 Notifications")
+                    performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+                }
+                is AccessibilityAction.Wait -> {
+                    Log.d(TAG, "⏱️ Attendre ${action.milliseconds}ms")
+                    delay(action.milliseconds)
+                    true
+                }
+                is AccessibilityAction.OpenApp -> {
+                    Log.d(TAG, "📱 Ouvrir app: ${action.packageName}")
+                    performOpenApp(action.packageName)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Erreur action $action: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * Ouvrir une application - NOUVELLE MÉTHODE À AJOUTER
+     */
+    private fun performOpenApp(packageName: String): Boolean {
+        return try {
+            val intent = packageManager.getLaunchIntentForPackage(packageName)
+            if (intent != null) {
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                Log.d(TAG, "✅ App ouverte: $packageName")
+                true
+            } else {
+                Log.w(TAG, "⚠️ App non trouvée: $packageName")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Erreur ouverture app: ${e.message}", e)
+            false
+        }
+    }
+
+    override fun onUnbind(intent: android.content.Intent?): Boolean {
+        serviceScope.cancel() // AJOUTER cette ligne
+        return super.onUnbind(intent)
     }
 
     override fun onDestroy() {

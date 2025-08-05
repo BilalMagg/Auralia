@@ -37,6 +37,8 @@ import com.voiceassistant.ui.screens.VoiceCommand
 import com.voiceassistant.ui.screens.LlamaScreen
 import com.voiceassistant.ui.screens.AgentScreen
 import com.voiceassistant.accessibility.VoiceAssistantAccessibilityService
+import com.voiceassistant.ai.AIAssistantManager
+import com.voiceassistant.repository.LlamaRepository
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
@@ -44,6 +46,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private var isServiceRunning by mutableStateOf(false)
     private var currentScreen by mutableStateOf("welcome")
     private var isListening by mutableStateOf(false)
+    private lateinit var aiAssistantManager: AIAssistantManager
+    private lateinit var llamaRepository: LlamaRepository
 
     @RequiresApi(Build.VERSION_CODES.O)
     private val requestPermissionLauncher = registerForActivityResult(
@@ -63,6 +67,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         Log.d("DebugTest", "MainActivity onCreate called")
 
         textToSpeech = TextToSpeech(this, this)
+        llamaRepository = LlamaRepository()
+        aiAssistantManager = AIAssistantManager(this, llamaRepository, textToSpeech)
 
         setContent {
             VoiceAssistantTheme(
@@ -119,7 +125,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             onBackClick = {
                                 currentScreen = "main"
                                 speakText("Returning to main screen")
-                            }
+                            },
+                            aiAssistantManager = aiAssistantManager
                         )
                     }
 
@@ -156,7 +163,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     @RequiresApi(Build.VERSION_CODES.O)
     private fun checkPermissions() {
-        val permissions = arrayOf(
+        val permissions = mutableListOf(
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.SEND_SMS,
             Manifest.permission.CALL_PHONE,
@@ -164,13 +171,43 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             Manifest.permission.WRITE_CONTACTS
         )
 
+        // Ajouter les permissions de stockage selon la version Android
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // Android 13+
+            permissions.addAll(listOf(
+                Manifest.permission.READ_MEDIA_IMAGES,
+                Manifest.permission.READ_MEDIA_VIDEO
+            ))
+        } else {
+            permissions.addAll(listOf(
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ))
+        }
+
+        // Pour Android 11+ (gestion du stockage élargie)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!android.os.Environment.isExternalStorageManager()) {
+                // Demander la permission de gestion complète du stockage
+                val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                intent.data = android.net.Uri.parse("package:$packageName")
+                try {
+                    startActivity(intent)
+                    Toast.makeText(this, "Veuillez autoriser l'accès aux fichiers pour les captures d'écran", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Erreur ouverture paramètres stockage: ${e.message}")
+                }
+            }
+        }
+
         val permissionsToRequest = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
         if (permissionsToRequest.isNotEmpty()) {
+            Log.d("MainActivity", "Demande permissions: $permissionsToRequest")
             requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
         } else {
+            Log.d("MainActivity", "Toutes les permissions sont accordées")
             startVoiceAssistantService()
         }
     }
@@ -308,12 +345,14 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun handleLlamaClick() {
         currentScreen = "llama"
-        speakText("Opening Gemma chat")
+        speakText("Opening Gemma chat with AI capabilities")
     }
 
     private fun handleAgentClick() {
         currentScreen = "agent"
         speakText("Opening Voice Agent")
+
+        processAICommand("take a screenshot")
     }
 
     // Test function to trigger mock accessibility automation
@@ -335,12 +374,23 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         Log.d("MainActivity", "Simple click test triggered")
         Log.d("MainActivity", "Note: Accessibility service should be logging events automatically")
     }
+    private fun processAICommand(command: String) {
+        aiAssistantManager.processVoiceCommand(command) { success, message ->
+            runOnUiThread {
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+                Log.d("MainActivity", "Résultat IA: $success - $message")
+            }
+        }
+    }
 
     override fun onDestroy() {
         super.onDestroy()
         if (::textToSpeech.isInitialized) {
             textToSpeech.stop()
             textToSpeech.shutdown()
+        }
+        if (::aiAssistantManager.isInitialized) {
+            aiAssistantManager.cleanup()
         }
     }
 }

@@ -111,4 +111,17 @@ class LlamaRepository {
             }
         }
     }
+    fun isModelLoaded(): Boolean {
+        // Pour l'instant, retourne true - vous pouvez implémenter une vraie vérification plus tard
+        return true
+    }
+    suspend fun checkConnection(): Boolean {
+        return try {
+            val testResponse = getResponse("test", "gemma3n:e2b", false)
+            testResponse.isNotEmpty()
+        } catch (e: Exception) {
+            Log.w("LlamaRepository", "Connection check failed: ${e.message}")
+            false
+        }
+    }
 }
