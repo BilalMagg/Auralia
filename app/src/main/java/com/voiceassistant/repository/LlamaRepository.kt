@@ -1,8 +1,10 @@
 // LlamaRepository.kt
 package com.voiceassistant.repository
 
+import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
+import com.voiceassistant.config.NetworkConfig
 import com.voiceassistant.model.LlamaRequest
 import com.voiceassistant.model.LlamaResponse
 import com.voiceassistant.network.LlamaApi
@@ -13,20 +15,26 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
-class LlamaRepository {
+class LlamaRepository(private val context: Context) {
+    
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS) // No timeout for streaming
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    private val retrofit = Retrofit.Builder()
-        .baseUrl("http://192.168.1.116:11434/")
-        .client(okHttpClient)
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
+    private val retrofit: Retrofit by lazy {
+        val baseUrl = NetworkConfig.getOllamaUrl(context)
+        Log.d("LlamaRepository", "Using Ollama server URL: $baseUrl")
+        
+        Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
 
-    private val api = retrofit.create(LlamaApi::class.java)
+    private val api: LlamaApi by lazy { retrofit.create(LlamaApi::class.java) }
     private val gson = Gson()
 
     suspend fun getResponse(prompt: String, model: String = "gemma3n:e2b", useStreaming: Boolean = false): String {
@@ -110,5 +118,36 @@ class LlamaRepository {
                 Exception("Network error: ${e.message}")
             }
         }
+    }
+    
+    /**
+     * Update the server URL and recreate the API client
+     */
+    fun updateServerUrl(newUrl: String) {
+        NetworkConfig.setOllamaUrl(context, newUrl)
+        Log.d("LlamaRepository", "Server URL updated to: $newUrl")
+        // Note: The retrofit instance will be recreated on next API call due to lazy initialization
+    }
+    
+    /**
+     * Get current server URL
+     */
+    fun getCurrentServerUrl(): String {
+        return NetworkConfig.getOllamaUrl(context)
+    }
+    
+    /**
+     * Reset to default server URL
+     */
+    fun resetToDefaultUrl() {
+        NetworkConfig.resetToDefault(context)
+        Log.d("LlamaRepository", "Reset to default server URL")
+    }
+    
+    /**
+     * Check if using custom URL
+     */
+    fun isUsingCustomUrl(): Boolean {
+        return NetworkConfig.isUsingCustomUrl(context)
     }
 }

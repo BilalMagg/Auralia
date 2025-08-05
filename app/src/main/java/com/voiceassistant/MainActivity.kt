@@ -35,6 +35,7 @@ import com.voiceassistant.ui.screens.VoiceCommand
 import com.voiceassistant.ui.screens.LlamaScreen
 import com.voiceassistant.ui.screens.AgentScreen
 import com.voiceassistant.ui.screens.SpeechToTextScreen
+import com.voiceassistant.ui.screens.ServerConfigScreen
 import com.voiceassistant.accessibility.VoiceAssistantAccessibilityService
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
@@ -96,7 +97,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             onVoiceLanguageClick = { handleVoiceLanguageChange() },
                             onThemeClick = { handleThemeChange() },
                             onWakeWordClick = { handleWakeWordChange() },
-                            onFontSizeClick = { handleFontSizeChange() }
+                            onFontSizeClick = { handleFontSizeChange() },
+                            onServerConfigClick = { handleServerConfigClick() }
                         )
                     }
                     "history" -> {
@@ -133,6 +135,14 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             },
                             onTranscriptionComplete = { transcription ->
                                 speakText("Transcription completed: $transcription")
+                            }
+                        )
+                    }
+                    "serverConfig" -> {
+                        ServerConfigScreen(
+                            onBackClick = {
+                                currentScreen = "settings"
+                                speakText("Returning to settings")
                             }
                         )
                     }
@@ -312,6 +322,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun handleSpeechToTextClick() {
         currentScreen = "speechToText"
         speakText("Opening Speech to Text")
+    }
+
+    private fun handleServerConfigClick() {
+        currentScreen = "serverConfig"
+        speakText("Opening server configuration")
     }
 
     // Test function to trigger mock accessibility automation
