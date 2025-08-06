@@ -46,12 +46,12 @@
 
 ### 🗣️ Speech Recognition
 - **Android SpeechRecognizer** for voice input
-- **Offline capability** depending on device
-- **Multi-language support** (system default)
+- **English language support** for command recognition
 - **Real-time transcription** with feedback
 - **Partial results** for immediate feedback
 - **Error handling** for recognition failures
 - **Configurable silence timeouts**
+- **Offline capability** depending on device
 
 ### 📸 Visual-AI Command Processing
 - **Automatic screenshot capture** when command is given
@@ -62,7 +62,7 @@
 
 ### 🔊 Text-to-Speech
 - **Voice feedback** for all interactions
-- **Multi-language synthesis** (system default)
+- **English language synthesis** for responses
 - **Natural voice output** for responses
 - **Speed and pitch control** available
 - **Queue management** for multiple responses
@@ -111,12 +111,12 @@
 
 ```
 1. User activates voice assistant → Manual activation
-2. User gives command → Speech recognition (Android SpeechRecognizer)
+2. User gives command in English → Speech recognition (Android SpeechRecognizer)
 3. App takes screenshot → Screen capture
 4. LLaVA analyzes screenshot → Visual context understanding
 5. Command + visual context sent to Gemma 3n → Intelligent processing
 6. Gemma 3n executes task → Task automation
-7. Voice feedback → Text-to-speech response
+7. Voice feedback in English → Text-to-speech response
 ```
 
 ### 📱 Example Use Cases
@@ -233,7 +233,7 @@ app/src/main/java/com/voiceassistant/
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/Auralia2.git
+   git clone https://github.com/BilalMagg/Auralia.git
    cd Auralia2
    ```
 
@@ -250,7 +250,46 @@ app/src/main/java/com/voiceassistant/
    - Connect an Android device or launch an emulator
    - Click "Run" (▶️)
 
-### Ollama Configuration
+## 🏃‍♂️ How to Run the Project
+
+### Step 1: Setup Development Environment
+
+1. **Install Android Studio**
+   - Download from [developer.android.com](https://developer.android.com/studio)
+   - Install with default settings
+   - Launch Android Studio
+
+2. **Install Android SDK**
+   - Open Android Studio
+   - Go to **Tools** → **SDK Manager**
+   - Install **Android SDK API 24+** (Android 7.0)
+   - Install **Android SDK Build-Tools**
+   - Install **Android Emulator**
+
+3. **Install Kotlin Plugin** (if not already installed)
+   - Go to **File** → **Settings** → **Plugins**
+   - Search for "Kotlin" and install
+
+### Step 2: Clone and Open Project
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/your-username/Auralia2.git
+   cd Auralia2
+   ```
+
+2. **Open in Android Studio**
+   - Launch Android Studio
+   - Click **"Open an existing Android Studio project"**
+   - Navigate to the cloned `Auralia2` folder
+   - Click **"OK"**
+
+3. **Wait for project sync**
+   - Android Studio will automatically sync Gradle
+   - Wait for all dependencies to download
+   - Check the bottom status bar for sync progress
+
+### Step 3: Setup Ollama Server
 
 1. **Install Ollama** on your computer
    ```bash
@@ -261,7 +300,7 @@ app/src/main/java/com/voiceassistant/
    # Download from https://ollama.ai/download
    ```
 
-2. **Install required models**
+2. **Install required AI models**
    ```bash
    # Install LLaVA for visual analysis
    ollama pull llava
@@ -270,9 +309,193 @@ app/src/main/java/com/voiceassistant/
    ollama pull gemma2:3n
    ```
 
-3. **Start the server**
+3. **Start Ollama server**
    ```bash
    ollama serve
+   ```
+
+4. **Verify server is running**
+   - Open browser and go to `http://localhost:11434`
+   - You should see Ollama API documentation
+
+### Step 4: Configure Project
+
+1. **Update Ollama server URL**
+   - Open the app in Android Studio
+   - Go to **Settings** screen in the app
+   - Enter your computer's IP address: `http://YOUR_IP:11434/`
+   - Save configuration
+
+2. **Grant permissions**
+   - Run the app on device/emulator
+   - Grant all requested permissions:
+     - Microphone access
+     - Camera access
+     - Storage access
+     - Accessibility service
+
+### Step 5: Run the Application
+
+1. **Connect device or start emulator**
+   ```bash
+   # Option 1: Physical device
+   # Enable USB debugging on your Android device
+   # Connect via USB cable
+   
+   # Option 2: Android emulator
+   # Open AVD Manager in Android Studio
+   # Create and start a virtual device
+   ```
+
+2. **Build and run**
+   - Click the **green play button** (▶️) in Android Studio
+   - Or use keyboard shortcut: `Shift + F10`
+   - Select your target device
+   - Wait for build and installation
+
+3. **First launch setup**
+   - App will open to Welcome screen
+   - Follow on-screen instructions
+   - Grant all required permissions
+   - Configure Ollama server settings
+
+### Step 6: Test the Application
+
+1. **Test basic functionality**
+   - Navigate through different screens
+   - Test speech recognition
+   - Test image analysis
+   - Verify Ollama connection
+
+2. **Test voice commands**
+   - Activate voice assistant
+   - Try commands like:
+     - "What time is it?"
+     - "Open settings"
+     - "Help"
+
+3. **Test visual-AI features**
+   - Take a screenshot or select image
+   - Use image analysis feature
+   - Verify LLaVA integration
+
+### Troubleshooting Common Issues
+
+#### Build Issues
+```bash
+# Clean and rebuild
+./gradlew clean
+./gradlew build
+
+# Invalidate caches in Android Studio
+# File → Invalidate Caches and Restart
+```
+
+#### Ollama Connection Issues
+```bash
+# Check if Ollama is running
+curl http://localhost:11434/api/tags
+
+# Restart Ollama server
+ollama serve
+
+# Check firewall settings
+# Ensure port 11434 is open
+```
+
+#### Permission Issues
+- Go to **Settings** → **Apps** → **Auralia**
+- Grant all permissions manually
+- Enable accessibility service
+
+#### Device Connection Issues
+```bash
+# Check if device is connected
+adb devices
+
+# Restart ADB
+adb kill-server
+adb start-server
+```
+
+### Development Commands
+
+```bash
+# Build debug APK
+./gradlew assembleDebug
+
+# Build release APK
+./gradlew assembleRelease
+
+# Run unit tests
+./gradlew test
+
+# Run instrumented tests
+./gradlew connectedAndroidTest
+
+# Clean project
+./gradlew clean
+
+# Check dependencies
+./gradlew dependencies
+```
+
+### IDE Configuration
+
+#### Android Studio Settings
+- **Memory**: Increase heap size in `studio64.exe.vmoptions`
+- **Gradle**: Use Gradle wrapper (recommended)
+- **Build**: Enable parallel builds in settings
+
+#### Recommended Plugins
+- **Kotlin** (built-in)
+- **Android WiFi ADB** (for wireless debugging)
+- **Rainbow Brackets** (for better code readability)
+- **Key Promoter X** (learn keyboard shortcuts)
+
+### Performance Optimization
+
+1. **Enable Gradle build cache**
+   ```bash
+   # In gradle.properties
+   org.gradle.caching=true
+   ```
+
+2. **Use parallel builds**
+   ```bash
+   # In gradle.properties
+   org.gradle.parallel=true
+   ```
+
+3. **Increase memory allocation**
+   ```bash
+   # In gradle.properties
+   org.gradle.jvmargs=-Xmx4096m -XX:MaxPermSize=512m
+   ```
+
+### Ollama Configuration
+
+1. **Install required models**
+   ```bash
+   # Install LLaVA for visual analysis
+   ollama pull llava
+   
+   # Install Gemma 3n for text processing
+   ollama pull gemma3n:e2e
+   ```
+
+2. **Start the server**
+   ```bash
+   ollama serve
+   ```
+
+3. **Test models**
+   ```bash
+   # Test LLaVA
+   ollama run llava "Describe this image"
+   
+   # Test Gemma 3n
+   ollama run gemma3n:e2e "Hello, how are you?"
    ```
 
 ## ⚙️ Configuration
@@ -316,7 +539,7 @@ The application automatically requests the following permissions:
 2. **Grant requested permissions**
 3. **Enable accessibility service** (recommended)
 4. **Activate voice assistant** through app interface
-5. **Give commands** with visual context:
+5. **Give commands in English** with visual context:
    - "Set alarm at 6 PM" (while on clock app)
    - "Search for Android development" (while on browser)
    - "Open settings" (from any screen)
@@ -364,6 +587,8 @@ The application automatically requests the following permissions:
 #### Smart Assistance
 - "Help" (context-aware help)
 - "Read notifications" (requires accessibility setup)
+
+**Note**: All voice commands are processed in English for optimal recognition accuracy.
 
 ## 🔧 Development
 
@@ -550,14 +775,12 @@ class CommandProcessor {
 - [ ] **Customizable wake word** (Hey Aura, Hey Assistant, etc.)
 - [ ] **Real-time wake word detection** with audio processing
 - [ ] **Background service** for continuous listening
-- [ ] **Automatic transition** to command mode (no clicks needed)
 - [ ] **Seamless hands-free experience**
 - [ ] **Visual feedback** during detection
 - [ ] **Fallback mode** if wake word detection fails
 
 #### Enhanced Wake Word Features
 - [ ] **Custom wake word creation** through app interface
-- [ ] **Multiple wake words** support (Hey Aura, Hey Assistant, etc.)
 - [ ] **Wake word training** for personal voice
 - [ ] **Wake word sensitivity** adjustment
 - [ ] **Wake word analytics** and usage statistics
@@ -676,10 +899,6 @@ class CommandProcessor {
 
 ---
 
-## 📄 License
-
-This project is licensed under MIT. See the [LICENSE](LICENSE) file for details.
-
 ## 🙏 Acknowledgments
 
 - **Ollama** for AI infrastructure
@@ -688,13 +907,5 @@ This project is licensed under MIT. See the [LICENSE](LICENSE) file for details.
 - **Android SpeechRecognizer** for native speech recognition
 - **Jetpack Compose** for modern interface
 - **The Android community** for tools and libraries
-
-## 📞 Support
-
-- **Issues** : [GitHub Issues](https://github.com/your-username/Auralia2/issues)
-- **Discussions** : [GitHub Discussions](https://github.com/your-username/Auralia2/discussions)
-- **Email** : support@auralia.app
-
----
 
 **Auralia** - Your intelligent and private voice assistant 🤖✨ 
