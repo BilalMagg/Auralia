@@ -203,7 +203,7 @@ app/src/main/java/com/voiceassistant/
 ├── 📚 repository/                      # Data layer
 ├── 🛠️ utils/                          # Utilities
 ├── ⚙️ config/                         # Configuration
-└── 🔬 tflite/                         # TensorFlow Lite
+
 ```
 
 ### Technologies Used
@@ -274,7 +274,7 @@ app/src/main/java/com/voiceassistant/
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/Auralia2.git
+   git clone https://github.com/BilalMagg/Auralia.git
    cd Auralia2
    ```
 
