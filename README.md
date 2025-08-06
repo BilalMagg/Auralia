@@ -22,7 +22,7 @@
 
 ## 🎯 Overview
 
-**Auralia** is an intelligent voice assistant for Android that uses a unique **visual-AI approach** to understand and execute commands. When you speak a command, the app takes a screenshot of your current screen, analyzes it with LLaVA (vision model), and then processes the command with Gemma 3n (text model) for intelligent task execution.
+Auralia is an Android voice assistant designed specifically for visually impaired users. It operates fully offline, leveraging the Gemma 3n AI model to provide private, multimodal, and accessible smartphone interactions. Users can perform daily tasks—such as setting alarms, sending messages, and web navigation—entirely through voice commands, minimizing reliance on the screen.
 
 ### 🎯 Project Goals
 
@@ -306,7 +306,7 @@ app/src/main/java/com/voiceassistant/
    ollama pull llava
    
    # Install Gemma 3n for text processing
-   ollama pull gemma2:3n
+   ollama pull gemma3n:e2b
    ```
 
 3. **Start Ollama server**
@@ -495,7 +495,7 @@ adb start-server
    ollama run llava "Describe this image"
    
    # Test Gemma 3n
-   ollama run gemma3n:e2e "Hello, how are you?"
+   ollama run gemma3n:e2b "Hello, how are you?"
    ```
 
 ## ⚙️ Configuration
