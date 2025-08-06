@@ -207,6 +207,8 @@ Think step by step and ALWAYS include PressEnter after typing URLs!
                 )
             }
 
+
+           //
             // Navigation web générique
             command.contains("website") || command.contains("site") || command.contains(".com") || command.contains(".ma") -> {
                 val url = extractUrl(command) ?: "google.com"
