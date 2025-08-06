@@ -34,6 +34,9 @@ sealed class AccessibilityAction {
 
     @Serializable
     data class OpenApp(val packageName: String) : AccessibilityAction()
+    @Serializable
+    data class SetAlarm(val hour: Int, val minute: Int) : AccessibilityAction()
+
 }
 
 @Serializable

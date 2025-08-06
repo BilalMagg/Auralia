@@ -1,11 +1,13 @@
 package com.voiceassistant.ai
 
+import android.content.ContentValues.TAG
 import com.voiceassistant.model.*
 import com.voiceassistant.repository.LlamaRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import android.util.Log
+import com.voiceassistant.accessibility.VoiceAssistantAccessibilityService
 import kotlinx.serialization.json.*
 
 class AICommandInterpreter(private val llamaRepository: LlamaRepository) {
@@ -19,6 +21,35 @@ class AICommandInterpreter(private val llamaRepository: LlamaRepository) {
     // Prompt système 100% générique - Gemma3 analyse TOUT
     private val universalSystemPrompt = """
 You are an intelligent Android automation AI. Your job is to analyze ANY user request and determine the exact sequence of Android actions needed to accomplish it.
+
+Respond ONLY in JSON. No explanation.
+
+Use the following format:
+{
+  "success": true,
+  "message": "Short description",
+  "actions": [
+    { "type": "OpenApp", "packageName": "com.android.deskclock" },
+    { "type": "ClickOnText", "text": "Add" },
+    ...
+  ]
+}
+
+⚠️ You MUST use known Android package names for common apps:
+- Clock: com.google.android.deskclock
+- Calendar: com.google.android.calendar
+- Maps: com.google.android.apps.maps
+- Google: com.google.android.googlequicksearchbox
+- Messages: com.google.android.apps.messaging
+- Settings: com.android.settings
+- WhatsApp: com.whatsapp
+- YouTube: com.google.android.youtube
+- Camera: com.android.camera
+
+If you're unsure what to do, use a Screenshot action first:
+{ "type": "Screenshot" }
+
+Only JSON. No explanation. No other format.
 
 Think step by step:
 1. What does the user want to achieve?
@@ -182,6 +213,48 @@ PROVIDE JSON RESPONSE:
             }
         }
     }
+    private fun getReliablePackageName(appType: String): String {
+        return when (appType.lowercase()) {
+            "clock", "alarm", "deskclock" -> {
+                // Try multiple possible clock app packages
+                val clockPackages = listOf(
+                    "com.google.android.deskclock",
+                    "com.android.deskclock",
+                    "com.samsung.android.app.clockpackage",
+                    "com.htc.android.worldclock"
+                )
+                VoiceAssistantAccessibilityService.instance?.findInstalledPackage(clockPackages) ?: "com.google.android.deskclock"
+            }
+            "browser", "chrome" -> {
+                val browserPackages = listOf(
+                    "com.android.chrome",
+                    "com.google.android.googlequicksearchbox",
+                    "com.android.browser"
+                )
+                VoiceAssistantAccessibilityService.instance?.findInstalledPackage(browserPackages) ?: "com.android.chrome"
+            }
+            "calculator" -> {
+                val calcPackages = listOf(
+                    "com.google.android.calculator2",
+                    "com.android.calculator2",
+                    "com.samsung.android.calculator"
+                )
+                VoiceAssistantAccessibilityService.instance?.findInstalledPackage(calcPackages) ?: "com.google.android.calculator2"
+            }
+            "settings" -> "com.android.settings"
+            "camera" -> {
+                val cameraPackages = listOf(
+                    "com.android.camera2",
+                    "com.google.android.GoogleCamera",
+                    "com.samsung.android.camera"
+                )
+                VoiceAssistantAccessibilityService.instance?.findInstalledPackage(cameraPackages) ?: "com.android.camera2"
+            }
+            else -> "com.android.settings" // fallback
+        }
+    }
+
+
 
     private fun extractJsonFromResponse(response: String): String {
         // Trouver le JSON dans la réponse
@@ -327,26 +400,19 @@ PROVIDE JSON RESPONSE:
     }
 
     private fun generateAlarmActions(jsonObject: kotlinx.serialization.json.JsonObject): List<AccessibilityAction> {
-        Log.d("AIInterpreter", "⏰ Generating alarm actions")
+        Log.d("AIInterpreter", "⏰ Generating DIRECT alarm actions using AlarmClock API")
 
         val actions = mutableListOf<AccessibilityAction>()
 
-        // Séquence basique pour régler une alarme
+        // NOUVELLE APPROCHE : Utiliser directement l'API AlarmClock au lieu d'essayer d'ouvrir l'app
         actions.addAll(listOf(
-            AccessibilityAction.GoHome,
-            AccessibilityAction.Wait(1000),
-            AccessibilityAction.OpenApp("com.google.android.deskclock"),
-            AccessibilityAction.Wait(3000),
-            AccessibilityAction.ClickOnText("Alarm"),
-            AccessibilityAction.Wait(1000),
-            AccessibilityAction.ClickOnText("Add"),
-            AccessibilityAction.Wait(1000),
-            AccessibilityAction.Screenshot // Pour voir l'interface
+            AccessibilityAction.SetAlarm(6, 0), // Action directe pour régler l'alarme à 6h00
+            AccessibilityAction.Wait(2000), // Attendre que l'intent soit traité
+            AccessibilityAction.Screenshot // Capture pour voir le résultat
         ))
 
         return actions
     }
-
     private fun generateBrowserActions(jsonObject: kotlinx.serialization.json.JsonObject): List<AccessibilityAction> {
         Log.d("AIInterpreter", "🌐 Generating browser actions")
 

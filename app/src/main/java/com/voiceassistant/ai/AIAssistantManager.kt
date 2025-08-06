@@ -166,6 +166,9 @@ Respond with JSON containing the actions needed to accomplish this task.
                         is AccessibilityAction.OpenNotifications -> "Open notifications"
                         is AccessibilityAction.Wait -> "Wait ${action.milliseconds}ms"
                         is AccessibilityAction.OpenApp -> "Open ${action.packageName}"
+                        is AccessibilityAction.SetAlarm      ->
+                            "Set alarm for ${action.hour}h${action.minute.toString().padStart(2,'0')}"
+                        else                                 -> "Unknown action: $action"
                     }
                 }
 
@@ -240,20 +243,20 @@ RESPONSE:
     /**
      * Décrire une action de manière lisible
      */
-    private fun describeAction(action: AccessibilityAction): String {
-        return when (action) {
-            is AccessibilityAction.Click -> "Click at coordinates (${action.x}, ${action.y})"
-            is AccessibilityAction.ClickOnText -> "Click on text '${action.text}'"
-            is AccessibilityAction.Scroll -> "Scroll ${action.direction}"
-            is AccessibilityAction.Type -> "Type '${action.text}'"
-            is AccessibilityAction.Screenshot -> "Take screenshot"
-            is AccessibilityAction.GoBack -> "Go back"
-            is AccessibilityAction.GoHome -> "Go to home screen"
-            is AccessibilityAction.OpenNotifications -> "Open notifications"
-            is AccessibilityAction.Wait -> "Wait ${action.milliseconds}ms"
-            is AccessibilityAction.OpenApp -> "Open app '${action.packageName}'"
-        }
-    }
+//    private fun describeAction(action: AccessibilityAction): String {
+//        return when (action) {
+//            is AccessibilityAction.Click -> "Click at coordinates (${action.x}, ${action.y})"
+//            is AccessibilityAction.ClickOnText -> "Click on text '${action.text}'"
+//            is AccessibilityAction.Scroll -> "Scroll ${action.direction}"
+//            is AccessibilityAction.Type -> "Type '${action.text}'"
+//            is AccessibilityAction.Screenshot -> "Take screenshot"
+//            is AccessibilityAction.GoBack -> "Go back"
+//            is AccessibilityAction.GoHome -> "Go to home screen"
+//            is AccessibilityAction.OpenNotifications -> "Open notifications"
+//            is AccessibilityAction.Wait -> "Wait ${action.milliseconds}ms"
+//            is AccessibilityAction.OpenApp -> "Open app '${action.packageName}'"
+//        }
+//    }
 
     private fun speakText(text: String) {
         if (textToSpeech.isSpeaking.not()) {

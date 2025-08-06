@@ -1,7 +1,10 @@
 package com.voiceassistant.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
+import android.content.ContentValues
+import android.content.Intent
 import android.graphics.Path
 import android.graphics.Rect
 import android.os.Bundle
@@ -14,6 +17,8 @@ import android.view.accessibility.AccessibilityNodeInfo
 import java.util.*
 import kotlinx.coroutines.*
 import com.voiceassistant.model.*
+import android.provider.AlarmClock
+import kotlinx.coroutines.*
 class VoiceAssistantAccessibilityService : AccessibilityService(), TextToSpeech.OnInitListener {
 
     private lateinit var textToSpeech: TextToSpeech
@@ -33,10 +38,60 @@ class VoiceAssistantAccessibilityService : AccessibilityService(), TextToSpeech.
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        Log.d(TAG, "Service d'accessibilité connecté - Autoclick disponible")
-        speakText("Service d'accessibilité Auralia activé")
+
+        // Remettre à jour le serviceInfo en code, pour être sûr
+        val info = AccessibilityServiceInfo().apply {
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+            notificationTimeout = 100
+            flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
+        serviceInfo = info
+
+        Log.d(TAG, "Service connecté avec nouvelle config serviceInfo")
     }
 
+    private suspend fun openAppAndAwaitWindow(pkg: String): Boolean {
+        if (!performOpenApp(pkg)) return false
+
+        // Poller pendant max 10 s
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < 10_000) {
+            val root = rootInActiveWindow
+            Log.d(TAG, "=== DUMP ROOT ===")
+            fun dump(node: AccessibilityNodeInfo, indent: String = "") {
+                Log.d(TAG, "$indent ${node.className}:${node.text}")
+                for (i in 0 until node.childCount) node.getChild(i)?.let { dump(it, "$indent  ") }
+            }
+            dump(root)
+            if (root?.packageName?.toString() == pkg) {
+                Log.d(TAG, "$pkg détecté à l'écran, childCount=${root.childCount}")
+                return true
+            }
+            delay(300)
+        }
+        Log.w(TAG, "⏱️ Timeout waiting for $pkg window")
+        return false
+    }
+    private fun openClockOrSetAlarm(hour: Int = 6, minutes: Int = 0): Boolean {
+        return try {
+            // Lance directement l'écran de création d'alarme
+            val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+                putExtra(AlarmClock.EXTRA_HOUR, hour)
+                putExtra(AlarmClock.EXTRA_MINUTES, minutes)
+                // facultatif :
+                putExtra(AlarmClock.EXTRA_MESSAGE, "Réveil Auralia")
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Impossible d’ouvrir l’horloge via AlarmClock API: ${e.message}", e)
+            false
+        }
+    }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event?.let { accessibilityEvent ->
@@ -609,39 +664,107 @@ class VoiceAssistantAccessibilityService : AccessibilityService(), TextToSpeech.
      */
     suspend fun executeActionSequence(sequence: ActionSequence): Boolean {
         return withContext(Dispatchers.Main) {
-            Log.d(TAG, "🎯 Exécution séquence: ${sequence.description}")
-            speakText("Exécution des actions...")
+            Log.d(TAG, "🎯 EXECUTING SEQUENCE: ${sequence.description}")
+            Log.d(TAG, "📋 Total actions: ${sequence.actions.size}")
 
-            var allSuccess = true
-
-            for ((index, action) in sequence.actions.withIndex()) {
-                Log.d(TAG, "Action ${index + 1}/${sequence.actions.size}: $action")
-                val success = executeAction(action)
-                if (!success) {
-                    allSuccess = false
-                    Log.e(TAG, "❌ Échec: $action")
-                } else {
-                    Log.d(TAG, "✅ Réussi: $action")
-                }
-
-                // Pause entre actions
-                delay(300)
+            // Debug: Print all actions first
+            sequence.actions.forEachIndexed { index, action ->
+                Log.d(TAG, "   Action ${index + 1}: $action")
             }
 
-            val resultMessage = if (allSuccess) "Toutes les actions réussies" else "Certaines actions ont échoué"
-            Log.d(TAG, resultMessage)
+            speakText("Exécution de ${sequence.actions.size} actions...")
+
+            var allSuccess = true
+            var actionIndex = 0
+
+            for (action in sequence.actions) {
+                actionIndex++
+                Log.d(TAG, "🔄 EXECUTING Action $actionIndex/${sequence.actions.size}: $action")
+
+                try {
+                    val success = when (action) {
+                        is AccessibilityAction.Wait -> {
+                            Log.d(TAG, "⏱️ Waiting ${action.milliseconds}ms")
+                            delay(action.milliseconds)
+                            true
+                        }
+                        is AccessibilityAction.OpenApp -> {
+                            Log.d(TAG, "📱 Opening app: ${action.packageName}")
+
+                            // NOUVEAU: Détection spéciale pour les apps d'alarme
+                            if (action.packageName.contains("deskclock") || action.packageName.contains("clock")) {
+                                Log.d(TAG, "🚨 Alarm app detected, using AlarmClock API")
+                                openClockOrSetAlarm(6, 0) // 6h00 par défaut
+                            } else {
+                                val result = openAppWithDelay(action.packageName)
+                                if (result) {
+                                    Log.d(TAG, "✅ App opened, waiting for load...")
+                                    delay(4000) // Wait longer for app to fully load
+                                } else {
+                                    Log.e(TAG, "❌ Failed to open app: ${action.packageName}")
+                                }
+                                result
+                            }
+                        }
+                        // NOUVEAU: Gestion directe des alarmes
+                        is AccessibilityAction.SetAlarm -> {
+                            Log.d(TAG, "⏰ Setting alarm directly: ${action.hour}:${action.minute}")
+                            openClockOrSetAlarm(action.hour, action.minute)
+                        }
+                        is AccessibilityAction.GoHome -> {
+                            Log.d(TAG, "🏠 Going home")
+                            performGlobalAction(GLOBAL_ACTION_HOME)
+                        }
+                        is AccessibilityAction.Screenshot -> {
+                            Log.d(TAG, "📸 Taking screenshot")
+                            performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
+                        }
+                        is AccessibilityAction.ClickOnText -> {
+                            Log.d(TAG, "👆 Clicking on text: ${action.text}")
+                            delay(1000) // Wait before clicking
+                            clickOnTextElement(action.text) ||
+                                    clickOnPartialTextElement(action.text) ||
+                                    clickOnDescriptionElement(action.text)
+                        }
+                        else -> {
+                            executeActionSync(action)
+                        }
+                    }
+
+                    if (!success) {
+                        allSuccess = false
+                        Log.e(TAG, "❌ FAILED Action $actionIndex: $action")
+                    } else {
+                        Log.d(TAG, "✅ SUCCESS Action $actionIndex: $action")
+                    }
+
+                    // Longer delay between actions for stability
+                    delay(800)
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ EXCEPTION Action $actionIndex: ${e.message}", e)
+                    allSuccess = false
+                }
+            }
+
+            val resultMessage = if (allSuccess) {
+                "✅ Toutes les ${sequence.actions.size} actions réussies"
+            } else {
+                "⚠️ Certaines actions réussies mais app d'alarme peut manquer"
+            }
+
+            Log.d(TAG, "🏁 SEQUENCE COMPLETED: $resultMessage")
             speakText(resultMessage)
 
             allSuccess
         }
     }
-
-
-    // Exécuter une action individuelle
-    /**
-     * Exécuter une action individuelle - NOUVELLE MÉTHODE À AJOUTER
-     */
-    private suspend fun executeAction(action: AccessibilityAction): Boolean {
+    private fun executeActionSuccess(action: AccessibilityAction): Boolean {
+        // This is just for counting, actual execution happens in executeActionSequence
+        return true
+    }
+    // Add this synchronous version for actions that don't need delay:
+    private fun executeActionSync(action: AccessibilityAction): Boolean {
         return try {
             when (action) {
                 is AccessibilityAction.Click -> {
@@ -650,7 +773,9 @@ class VoiceAssistantAccessibilityService : AccessibilityService(), TextToSpeech.
                 }
                 is AccessibilityAction.ClickOnText -> {
                     Log.d(TAG, "👆 Clic sur texte: ${action.text}")
-                    clickOnTextElement(action.text)
+                    clickOnTextElement(action.text) ||
+                            clickOnPartialTextElement(action.text) ||
+                            clickOnDescriptionElement(action.text)
                 }
                 is AccessibilityAction.Scroll -> {
                     Log.d(TAG, "📜 Défilement: ${action.direction}")
@@ -662,7 +787,7 @@ class VoiceAssistantAccessibilityService : AccessibilityService(), TextToSpeech.
                 }
                 is AccessibilityAction.Screenshot -> {
                     Log.d(TAG, "📸 Capture d'écran")
-                    handleTakeScreenshot()
+                    performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
                 }
                 is AccessibilityAction.GoBack -> {
                     Log.d(TAG, "⬅️ Retour")
@@ -676,43 +801,304 @@ class VoiceAssistantAccessibilityService : AccessibilityService(), TextToSpeech.
                     Log.d(TAG, "🔔 Notifications")
                     performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
                 }
-                is AccessibilityAction.Wait -> {
-                    Log.d(TAG, "⏱️ Attendre ${action.milliseconds}ms")
-                    delay(action.milliseconds)
-                    true
+                // NOUVEAU: Gestion de SetAlarm dans executeActionSync aussi
+                is AccessibilityAction.SetAlarm -> {
+                    Log.d(TAG, "⏰ Setting alarm: ${action.hour}:${action.minute}")
+                    openClockOrSetAlarm(action.hour, action.minute)
                 }
-                is AccessibilityAction.OpenApp -> {
-                    Log.d(TAG, "📱 Ouvrir app: ${action.packageName}")
-                    performOpenApp(action.packageName)
-                }
+                else -> false
             }
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Erreur action $action: ${e.message}", e)
+            Log.e(TAG, "❌ Erreur action sync: ${e.message}", e)
             false
         }
     }
 
+     fun findInstalledPackage(packages: List<String>): String? {
+        for (packageName in packages) {
+            try {
+                packageManager.getPackageInfo(packageName, 0)
+                Log.d(ContentValues.TAG, "✅ Found installed package: $packageName")
+                return packageName
+            } catch (e: Exception) {
+                Log.d(ContentValues.TAG, "❌ Package not found: $packageName")
+            }
+        }
+        return null
+    }
+    private suspend fun openAppWithDelay(packageName: String): Boolean {
+        return withContext(Dispatchers.Main) {
+            try {
+                Log.d(TAG, "🚀 ATTEMPTING TO OPEN: $packageName")
+
+                // Step 1: Check if package exists
+                val packageExists = try {
+                    packageManager.getPackageInfo(packageName, 0)
+                    true
+                } catch (e: Exception) {
+                    Log.w(TAG, "❌ Package not installed: $packageName")
+                    false
+                }
+
+                if (!packageExists) {
+                    // Try alternative packages
+                    val alternatives = getAlternativePackages(packageName)
+                    for (altPackage in alternatives) {
+                        Log.d(TAG, "🔄 Trying alternative: $altPackage")
+                        if (openAppWithDelay(altPackage)) {
+                            return@withContext true
+                        }
+                    }
+                    return@withContext false
+                }
+
+                // Step 2: Get launch intent
+                val intent = packageManager.getLaunchIntentForPackage(packageName)
+                if (intent == null) {
+                    Log.w(TAG, "❌ No launch intent for: $packageName")
+                    return@withContext false
+                }
+
+                // Step 3: Configure intent properly
+                intent.addFlags(
+                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                            android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                            android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                            android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                )
+
+                Log.d(TAG, "🎯 Starting activity with intent: $intent")
+                Log.d(TAG, "   - Action: ${intent.action}")
+                Log.d(TAG, "   - Component: ${intent.component}")
+                Log.d(TAG, "   - Flags: ${intent.flags}")
+
+                // Step 4: Start the activity
+                startActivity(intent)
+
+                Log.d(TAG, "✅ Activity started successfully: $packageName")
+                return@withContext true
+
+            } catch (e: SecurityException) {
+                Log.e(TAG, "❌ SecurityException opening $packageName: ${e.message}")
+                return@withContext false
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error opening $packageName: ${e.message}", e)
+                return@withContext false
+            }
+        }
+    }
+
+    private fun getAlternativePackages(packageName: String): List<String> {
+        return when (packageName) {
+            "com.google.android.deskclock" -> listOf(
+                "com.android.deskclock",
+                "com.samsung.android.app.clockpackage",
+                "com.htc.android.worldclock",
+                "com.oneplus.deskclock"
+            )
+            "com.android.chrome" -> listOf(
+                "com.google.android.googlequicksearchbox",
+                "com.android.browser"
+            )
+            "com.google.android.calculator2" -> listOf(
+                "com.android.calculator2",
+                "com.samsung.android.calculator"
+            )
+            else -> emptyList()
+        }
+    }
+
+    private suspend fun openAppAndWait(packageName: String): Boolean {
+        val launched = performOpenApp(packageName)
+        if (!launched) return false
+
+        // Attendre que la nouvelle fenêtre de l'app soit active
+        val start = System.currentTimeMillis()
+        val timeout = 10_000L // 10s max
+        while (System.currentTimeMillis() - start < timeout) {
+            val root = rootInActiveWindow
+            Log.d(TAG, "=== DUMP ROOT ===")
+            if (root?.packageName?.toString() == packageName) {
+                Log.d(TAG, "🟢 $packageName est à l'écran")
+                return true
+            }
+            delay(300)
+        }
+        Log.w(TAG, "⚠️ Timeout waiting for $packageName window")
+        return false
+    }
+
+
+    /**
+     * Exécuter une action individuelle - NOUVELLE MÉTHODE À AJOUTER
+     */
+//    private suspend fun executeAction(action: AccessibilityAction): Boolean {
+//        return try {
+//            when (action) {
+//                is AccessibilityAction.Click -> {
+//                    Log.d(TAG, "👆 Clic à (${action.x}, ${action.y})")
+//                    performClickAtCoordinates(action.x.toFloat(), action.y.toFloat())
+//                }
+//                is AccessibilityAction.ClickOnText -> {
+//                    Log.d(TAG, "👆 Clic sur texte: ${action.text}")
+//                    clickOnTextElement(action.text)
+//                }
+//                is AccessibilityAction.Scroll -> {
+//                    Log.d(TAG, "📜 Défilement: ${action.direction}")
+//                    performScroll(action.direction.name)
+//                }
+//                is AccessibilityAction.Type -> {
+//                    Log.d(TAG, "⌨️ Saisie: ${action.text}")
+//                    typeTextInField(action.text)
+//                }
+//                is AccessibilityAction.Screenshot -> {
+//                    Log.d(TAG, "📸 Capture d'écran")
+//                    performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
+//                }
+//                is AccessibilityAction.GoBack -> {
+//                    Log.d(TAG, "⬅️ Retour")
+//                    performGlobalAction(GLOBAL_ACTION_BACK)
+//                }
+//                is AccessibilityAction.GoHome -> {
+//                    Log.d(TAG, "🏠 Accueil")
+//                    performGlobalAction(GLOBAL_ACTION_HOME)
+//                }
+//                is AccessibilityAction.OpenNotifications -> {
+//                    Log.d(TAG, "🔔 Notifications")
+//                    performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+//                }
+//                is AccessibilityAction.Wait -> {
+//                    Log.d(TAG, "⏱️ Attendre ${action.milliseconds}ms")
+//                    delay(action.milliseconds)
+//                    true
+//                }
+//                is AccessibilityAction.OpenApp -> {
+//                    Log.d(TAG, "📱 Ouvrir app: ${action.packageName}")
+//                    val success = performOpenApp(action.packageName)
+//                    if (success) {
+//                        // Wait for app to load
+//                        delay(3000)
+//                    }
+//                    success
+//                }
+//            }
+//        } catch (e: Exception) {
+//            Log.e(TAG, "❌ Erreur action $action: ${e.message}", e)
+//            false
+//        }
+//    }
     /**
      * Ouvrir une application - NOUVELLE MÉTHODE À AJOUTER
      */
     private fun performOpenApp(packageName: String): Boolean {
         return try {
+            Log.d(TAG, "🚀 Attempting to open: $packageName")
+
             val intent = packageManager.getLaunchIntentForPackage(packageName)
             if (intent != null) {
-                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                intent.addFlags(
+                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                            android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+                )
                 startActivity(intent)
-                Log.d(TAG, "✅ App ouverte: $packageName")
-                true
+                Log.d(TAG, "✅ App launched via intent: $packageName")
+                return true
             } else {
-                Log.w(TAG, "⚠️ App non trouvée: $packageName")
-                false
+                Log.w(TAG, "⚠️ No launch intent for $packageName")
+
+                // Try alternative package names for common apps
+                val alternativePackage = getAlternativePackage(packageName)
+                if (alternativePackage != null && alternativePackage != packageName) {
+                    Log.d(TAG, "🔄 Trying alternative package: $alternativePackage")
+                    return performOpenApp(alternativePackage)
+                }
+
+                // Final fallback: go home and try to find the app
+                performGlobalAction(GLOBAL_ACTION_HOME)
+                return false
             }
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Erreur ouverture app: ${e.message}", e)
+            Log.e(TAG, "❌ Error opening app: ${e.message}", e)
             false
         }
     }
 
+    private fun getAlternativePackage(packageName: String): String? {
+        return when (packageName) {
+            "com.google.android.deskclock" -> "com.android.deskclock"
+            "com.android.chrome" -> "com.google.android.googlequicksearchbox"
+            "com.google.android.calculator2" -> "com.android.calculator2"
+            else -> null
+        }
+    }
+
+
+
+    private fun getAppDisplayName(packageName: String): String? {
+        return when (packageName) {
+            "com.google.android.deskclock" -> "Clock"
+            "com.android.chrome" -> "Chrome"
+            "com.google.android.googlequicksearchbox" -> "Google"
+            "com.android.settings" -> "Settings"
+            "com.google.android.calculator2" -> "Calculator"
+            "com.android.camera2" -> "Camera"
+            "com.google.android.gm" -> "Gmail"
+            else -> {
+                try {
+                    val appInfo = packageManager.getApplicationInfo(packageName, 0)
+                    packageManager.getApplicationLabel(appInfo).toString()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+        }
+    }
+    fun debugInstalledApps() {
+        Log.d(TAG, "🔍 DEBUGGING: Checking installed apps...")
+
+        val testPackages = listOf(
+            "com.google.android.deskclock",
+            "com.android.deskclock",
+            "com.google.android.calculator2",
+            "com.android.calculator2",
+            "com.android.chrome",
+            "com.google.android.googlequicksearchbox",
+            "com.android.settings"
+        )
+
+        testPackages.forEach { packageName ->
+            try {
+                val packageInfo = packageManager.getPackageInfo(packageName, 0)
+                val intent = packageManager.getLaunchIntentForPackage(packageName)
+                Log.d(TAG, "✅ PACKAGE FOUND: $packageName")
+                Log.d(TAG, "   - Version: ${packageInfo.versionName}")
+                Log.d(TAG, "   - Launch Intent: ${intent != null}")
+                if (intent != null) {
+                    Log.d(TAG, "   - Intent Action: ${intent.action}")
+                    Log.d(TAG, "   - Intent Component: ${intent.component}")
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "❌ PACKAGE NOT FOUND: $packageName - ${e.message}")
+            }
+        }
+
+        // List ALL installed apps with Clock in the name
+        try {
+            val allApps = packageManager.getInstalledApplications(0)
+            val clockApps = allApps.filter {
+                val label = packageManager.getApplicationLabel(it).toString().lowercase()
+                label.contains("clock") || label.contains("alarm") || it.packageName.contains("clock")
+            }
+
+            Log.d(TAG, "🕐 CLOCK-RELATED APPS FOUND:")
+            clockApps.forEach { appInfo ->
+                val label = packageManager.getApplicationLabel(appInfo)
+                Log.d(TAG, "   - $label (${appInfo.packageName})")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error listing apps: ${e.message}")
+        }
+    }
     override fun onUnbind(intent: android.content.Intent?): Boolean {
         serviceScope.cancel() // AJOUTER cette ligne
         return super.onUnbind(intent)
