@@ -21,20 +21,20 @@ class VoiceAgent(
     private val repository = LlamaRepository()
     private val parser = ActionParser()
     private var actionExecutor: ActionExecutor? = null
-    
+
     // State management
     private val _isRunning = MutableStateFlow(false)
     val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
-    
+
     private val _currentTask = MutableStateFlow<String?>(null)
     val currentTask: StateFlow<String?> = _currentTask.asStateFlow()
-    
+
     private val _executedActions = MutableStateFlow<List<Action>>(emptyList())
     val executedActions: StateFlow<List<Action>> = _executedActions.asStateFlow()
-    
+
     private val _lastResult = MutableStateFlow<ExecutionResult?>(null)
     val lastResult: StateFlow<ExecutionResult?> = _lastResult.asStateFlow()
-    
+
     private val _screenText = MutableStateFlow<String?>(null)
     val screenText: StateFlow<String?> = _screenText.asStateFlow()
 
@@ -95,50 +95,50 @@ class VoiceAgent(
     private suspend fun awaitTaskCompletion(userRequest: String) {
         var iteration = 0
         val maxIterations = 20 // Prevent infinite loops
-        
+
         while (_isRunning.value && iteration < maxIterations) {
             iteration++
             Log.d("VoiceAgent", "Iteration $iteration")
-            
+
             // Take screenshot and extract text if needed
             if (_screenText.value == null || _lastResult.value?.screenshotTaken == true) {
                 takeScreenshotAndOcr()
             }
-            
+
             // Create prompt for the model
             val prompt = parser.createPrompt(
                 userRequest = userRequest,
                 screenText = _screenText.value,
                 previousActions = _executedActions.value
             )
-            
+
             // Get model response
             val modelResponse = getModelResponse(prompt)
             if (modelResponse == null) {
                 Log.e("VoiceAgent", "Failed to get model response")
                 break
             }
-            
+
             // Execute the action
             val result = actionExecutor!!.executeAction(modelResponse.action)
             _lastResult.value = result
-            
+
             // Add to executed actions
             _executedActions.value = _executedActions.value + modelResponse.action
-            
+
             Log.d("VoiceAgent", "Executed action: ${modelResponse.action.description}")
             Log.d("VoiceAgent", "Result: ${result.message}")
-            
+
             // Check if task is complete
             if (modelResponse.action is CompleteAction) {
                 Log.d("VoiceAgent", "Task completed: ${modelResponse.action.message}")
                 break
             }
-            
+
             // Small delay between actions
             kotlinx.coroutines.delay(500)
         }
-        
+
         if (iteration >= maxIterations) {
             Log.w("VoiceAgent", "Reached maximum iterations, stopping")
             _lastResult.value = ExecutionResult(false, "Reached maximum iterations")
@@ -177,7 +177,7 @@ class VoiceAgent(
         return try {
             val response = repository.getResponse(prompt, modelName, false)
             Log.d("VoiceAgent", "Model response: $response")
-            
+
             // Try to parse as JSON
             val modelResponse = parser.parseModelResponse(response)
             Log.d("VoiceAgent", "Parsed action: ${modelResponse.action.description}")

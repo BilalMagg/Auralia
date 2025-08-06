@@ -1,11 +1,14 @@
-// LlamaScreen.kt - Version complète finale
+// LlamaScreen.kt - Version fusionnée avec exécution cachée
 package com.voiceassistant.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -13,396 +16,726 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.voiceassistant.model.ChatMessage
 import com.voiceassistant.viewmodel.LlamaViewModel
+import com.voiceassistant.viewmodel.SpeechToTextViewModel
+import com.voiceassistant.viewmodel.SpeechToTextEvent
+import kotlinx.coroutines.launch
 import com.voiceassistant.ai.AIAssistantManager
+import android.util.Log
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LlamaScreen(
     onBackClick: () -> Unit = {},
     aiAssistantManager: AIAssistantManager? = null
 ) {
     val vm: LlamaViewModel = viewModel()
-    val result by vm.response.collectAsState()
+    val sttVm: SpeechToTextViewModel = viewModel()
+
+    val chatMessages by vm.chatMessages.collectAsState()
+    val currentResponse by vm.currentResponse.collectAsState()
     val isLoading by vm.isLoading.collectAsState()
     val useStreaming by vm.useStreaming.collectAsState()
     val selectedModel by vm.selectedModel.collectAsState()
 
+    // STT states
+    val isListening by sttVm.isListening.collectAsState()
+    val isProcessing by sttVm.isProcessing.collectAsState()
+    val transcriptionResult by sttVm.transcriptionResult.collectAsState()
+    val sttError by sttVm.error.collectAsState()
+
     var prompt by remember { mutableStateOf("") }
     var showModelSelector by remember { mutableStateOf(false) }
+    var showClearChatDialog by remember { mutableStateOf(false) }
+    var showSttConfirmation by remember { mutableStateOf(false) }
+    var pendingTranscription by remember { mutableStateOf("") }
+    var autoSendStt by remember { mutableStateOf(false) }
 
-    // États pour les résultats IA
-    var aiExecutionResult by remember { mutableStateOf("") }
-    var generatedJsonText by remember { mutableStateOf("") }
-    var generatedActionsList by remember { mutableStateOf(listOf<String>()) }
-    var showResults by remember { mutableStateOf(false) }
-    var isExecuting by remember { mutableStateOf(false) }
+    // Mode d'exécution AI (caché mais actif)
+    var aiExecutionEnabled by remember { mutableStateOf(true) }
+    var isExecutingAI by remember { mutableStateOf(false) }
+
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    var showScrollToBottom by remember { mutableStateOf(false) }
+
+    // Function to execute AI commands silently in background
+    fun executeAICommandSilently(
+        command: String,
+        manager: AIAssistantManager,
+        vm: LlamaViewModel,
+        setExecuting: (Boolean) -> Unit
+    ) {
+        setExecuting(true)
+        Log.d("LlamaScreen", "🤖 Executing AI command silently: $command")
+
+        try {
+            // Try to use detailed method first
+            manager.processVoiceCommandWithDetails(command) { success, message, realJson, realActions ->
+                Log.d("LlamaScreen", "AI Result: Success=$success, Message=$message")
+                Log.d("LlamaScreen", "AI JSON: $realJson")
+                Log.d("LlamaScreen", "AI Actions: ${realActions.joinToString()}")
+                setExecuting(false)
+
+                // Optionally add a subtle notification in chat
+                if (!success) {
+                    vm.addSystemMessage("⚠️ Action failed: $message")
+                }
+            }
+        } catch (e: Exception) {
+            // Fallback to simple method
+            manager.processVoiceCommand(command) { success, message ->
+                Log.d("LlamaScreen", "AI Simple Result: Success=$success, Message=$message")
+                setExecuting(false)
+
+                if (!success) {
+                    vm.addSystemMessage("⚠️ Action failed: $message")
+                }
+            }
+        }
+    }
+
+    // Handle STT events
+    LaunchedEffect(Unit) {
+        sttVm.events.collect { event ->
+            when (event) {
+                is SpeechToTextEvent.TranscriptionComplete -> {
+                    pendingTranscription = event.transcription
+                    if (autoSendStt) {
+                        // Auto-send to model directly
+                        vm.sendPrompt(event.transcription)
+                        // Also execute AI commands if enabled
+                        if (aiExecutionEnabled && aiAssistantManager != null) {
+                            executeAICommandSilently(
+                                event.transcription,
+                                aiAssistantManager,
+                                vm,
+                                { isExecutingAI = it }
+                            )
+                        }
+                    } else {
+                        // Show confirmation dialog
+                        showSttConfirmation = true
+                    }
+                }
+                is SpeechToTextEvent.Error -> {
+                    // Could show a snackbar here for errors
+                }
+                is SpeechToTextEvent.PermissionRequired -> {
+                    // Handle permission request
+                }
+                else -> {}
+            }
+        }
+    }
+
+    // Handle transcription result changes for auto-send
+    LaunchedEffect(transcriptionResult, isListening) {
+        if (transcriptionResult.isNotEmpty() && !isListening && autoSendStt) {
+            vm.sendPrompt(transcriptionResult)
+            if (aiExecutionEnabled && aiAssistantManager != null) {
+                executeAICommandSilently(
+                    transcriptionResult,
+                    aiAssistantManager,
+                    vm,
+                    { isExecutingAI = it }
+                )
+            }
+        }
+    }
+
+    // Auto-scroll to bottom when new messages are added
+    LaunchedEffect(chatMessages.size) {
+        if (chatMessages.isNotEmpty()) {
+            coroutineScope.launch {
+                listState.animateScrollToItem(chatMessages.size - 1)
+            }
+        }
+    }
+
+    // Check if we should show scroll to bottom button
+    LaunchedEffect(listState.firstVisibleItemIndex) {
+        showScrollToBottom = listState.firstVisibleItemIndex < chatMessages.size - 3
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
-            .padding(top = 32.dp)
-            .verticalScroll(rememberScrollState())
+            .background(Color(0xFFF5F5F5))
     ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBackClick) {
-                Icon(
-                    imageVector = Icons.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.Black
-                )
-            }
-            Text(
-                text = "🤖 AI Generic Assistant",
-                style = MaterialTheme.typography.headlineMedium,
-                color = Color.Black
-            )
-            Spacer(modifier = Modifier.width(48.dp))
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Settings
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedButton(
-                onClick = { showModelSelector = true },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Model: $selectedModel", color = Color.Black)
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Streaming", color = Color.Black, modifier = Modifier.padding(end = 8.dp))
-                Switch(checked = useStreaming, onCheckedChange = { vm.toggleStreaming() })
-            }
-        }
-
-        // Model selector dialog
-        if (showModelSelector) {
-            AlertDialog(
-                onDismissRequest = { showModelSelector = false },
-                title = { Text("Select Model", color = Color.Black) },
-                text = {
-                    Column {
-                        listOf("gemma3n:e2b", "llama3.2", "mistral", "codellama").forEach { model ->
-                            TextButton(
-                                onClick = {
-                                    vm.setModel(model)
-                                    showModelSelector = false
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = model,
-                                    color = if (selectedModel == model) Color.Blue else Color.Black
-                                )
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showModelSelector = false }) {
-                        Text("Cancel", color = Color.Black)
-                    }
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Info Card
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "🧠 Pure AI Mode",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
-                )
-                Text(
-                    text = "No hardcoded actions! Gemma3 analyzes your request and decides what to do.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.Black
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Try: 'visit google.com', 'calculate 25×67', 'turn on airplane mode', 'send location to John'",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Input field
-        OutlinedTextField(
-            value = prompt,
-            onValueChange = { prompt = it },
-            label = { Text("Enter ANY request - AI will figure it out", color = Color.Gray) },
-            placeholder = { Text("e.g., 'I want to visit stackoverflow.com'") },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 3,
-            maxLines = 5,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = Color.Gray
-            )
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Single unified button
-        Button(
-            onClick = {
-                if (prompt.isNotBlank()) {
-                    isExecuting = true
-                    showResults = false
-
-                    // Reset previous results
-                    aiExecutionResult = ""
-                    generatedJsonText = ""
-                    generatedActionsList = emptyList()
-
-                    // Send to model for chat response
-                    vm.sendPrompt(prompt)
-                    // Execute with AI and capture REAL details
-                    if (aiAssistantManager != null) {
-                        // Check if the detailed method exists, otherwise use simple method
-                        try {
-                            aiAssistantManager.processVoiceCommandWithDetails(prompt) { success, message, realJson, realActions ->
-                                aiExecutionResult = if (success) {
-                                    "✅ Success: $message"
-                                } else {
-                                    "❌ Error: $message"
-                                }
-
-                                generatedJsonText = realJson
-                                generatedActionsList = realActions
-                                showResults = true
-                                isExecuting = false
-                            }
-                        } catch (e: Exception) {
-                            // Fallback to simple method if detailed doesn't exist
-                            aiAssistantManager.processVoiceCommand(prompt) { success, message ->
-                                aiExecutionResult = if (success) {
-                                    "✅ Success: $message"
-                                } else {
-                                    "❌ Error: $message"
-                                }
-
-                                generatedJsonText = "JSON capture not available in simple mode"
-                                generatedActionsList = listOf("Action details not available - using simple mode")
-                                showResults = true
-                                isExecuting = false
-                            }
-                        }
-                    } else {
-                        aiExecutionResult = "❌ AI Assistant not available"
-                        generatedJsonText = """{"success": false, "message": "AI service unavailable"}"""
-                        generatedActionsList = listOf("Error: AI Assistant Manager not initialized")
-                        showResults = true
-                        isExecuting = false
+        // Top Bar
+        TopAppBar(
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🤖 AI Assistant",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold
+                    )
+                    // Subtle indicator when AI is executing
+                    if (isExecutingAI) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             },
-            enabled = prompt.isNotBlank() && !isLoading && !isExecuting,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (isLoading || isExecuting) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-            }
-            Text(
-                when {
-                    isExecuting -> "🧠 AI is thinking & executing..."
-                    isLoading -> "💭 Processing with model..."
-                    else -> "🚀 Analyze & Execute with AI"
+            navigationIcon = {
+                IconButton(onClick = onBackClick) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.Black
+                    )
                 }
+            },
+            actions = {
+                // Settings icon for AI execution toggle
+                IconButton(onClick = { aiExecutionEnabled = !aiExecutionEnabled }) {
+                    Icon(
+                        imageVector = if (aiExecutionEnabled) Icons.Filled.PlayArrow else Icons.Filled.Clear,
+                        contentDescription = "Toggle AI Execution",
+                        tint = if (aiExecutionEnabled) Color.Green else Color.Gray
+                    )
+                }
+                IconButton(onClick = { showClearChatDialog = true }) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "Clear Chat",
+                        tint = Color.Black
+                    )
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Color.White
             )
-        }
+        )
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // AI Results Section
-        if (showResults) {
-            // Execution Result
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (aiExecutionResult.startsWith("✅"))
-                        MaterialTheme.colorScheme.primaryContainer
-                    else
-                        MaterialTheme.colorScheme.errorContainer
-                )
+        // Settings Row (simplified)
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "🤖 AI Execution Result:",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = aiExecutionResult,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Black
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Generated JSON & Actions
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "🧠 AI Analysis & Actions",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Raw JSON from Gemma3
-                    Text(
-                        text = "📋 Raw Gemma3 Response:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.Black
-                    )
-
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color.Black
-                        )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Model Selector
+                    OutlinedButton(
+                        onClick = { showModelSelector = true },
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Text(
-                            text = generatedJsonText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Green,
-                            modifier = Modifier.padding(12.dp)
-                        )
+                        Text("Model: $selectedModel", color = Color.Black)
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
 
-                    // Generated Actions
-                    Text(
-                        text = "🎬 AI Generated Actions (${generatedActionsList.size}):",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.Black
-                    )
-
-                    if (generatedActionsList.isNotEmpty()) {
-                        generatedActionsList.forEachIndexed { index, action ->
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "${index + 1}. $action",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.padding(8.dp),
-                                    color = Color.Black
-                                )
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = "No actions generated",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray,
-                            modifier = Modifier.padding(8.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        // Model Chat Response
-        if (result.isNotEmpty()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color.Black)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                    // Streaming Toggle
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "💬 Model Chat Response:",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
-                            modifier = Modifier.padding(bottom = 8.dp)
+                            text = "Stream",
+                            color = Color.Black,
+                            modifier = Modifier.padding(end = 8.dp),
+                            fontSize = 14.sp
                         )
-                        if (useStreaming) {
-                            Text("Streaming", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                        }
+                        Switch(
+                            checked = useStreaming,
+                            onCheckedChange = { vm.toggleStreaming() }
+                        )
                     }
-                    Text(
-                        text = result,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color.White
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Second row: Auto-send STT toggle & AI execution status
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "Auto-send speech",
+                            color = Color.Black,
+                            fontSize = 14.sp
+                        )
+                        Switch(
+                            checked = autoSendStt,
+                            onCheckedChange = { autoSendStt = it }
+                        )
+                    }
+
+                    // AI execution status (subtle)
+                    if (aiAssistantManager != null) {
+                        Text(
+                            text = if (aiExecutionEnabled) "AI: ON" else "AI: OFF",
+                            color = if (aiExecutionEnabled) Color.Green else Color.Gray,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+
+        // Chat Messages
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                state = listState,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(chatMessages) { message ->
+                    ChatMessageItem(
+                        message = message,
+                        isStreaming = isLoading && !message.isUser && message.content.isNotEmpty() && useStreaming
+                    )
+                }
+
+                // Show typing indicator when streaming is active but no response yet
+                if (isLoading && useStreaming && chatMessages.isNotEmpty() && chatMessages.last().isUser) {
+                    item {
+                        ChatMessageItem(
+                            message = ChatMessage(
+                                content = "",
+                                isUser = false,
+                                model = selectedModel
+                            ),
+                            isStreaming = true
+                        )
+                    }
+                }
+            }
+
+            // Scroll to bottom button
+            if (showScrollToBottom && chatMessages.isNotEmpty()) {
+                FloatingActionButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(chatMessages.size - 1)
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp),
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        contentDescription = "Scroll to bottom"
                     )
                 }
             }
         }
 
-        // Status indicators
-        if (aiAssistantManager == null) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
+        // Input Section
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "⚠️ AI Assistant Not Available",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    // Text Input
+                    OutlinedTextField(
+                        value = prompt,
+                        onValueChange = { prompt = it },
+                        label = { Text("Enter your message", color = Color.Gray) },
+                        modifier = Modifier.weight(1f),
+                        minLines = 1,
+                        maxLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = Color.Gray
+                        )
                     )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Microphone Button
+                    FloatingActionButton(
+                        onClick = {
+                            if (isListening) {
+                                sttVm.stopListening()
+                            } else {
+                                sttVm.startListening()
+                            }
+                        },
+                        modifier = Modifier.size(56.dp),
+                        containerColor = if (isListening || isProcessing) Color.Red else MaterialTheme.colorScheme.primary,
+                        contentColor = Color.White
+                    ) {
+                        if (isProcessing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = if (isListening) Icons.Filled.Close else Icons.Filled.Phone,
+                                contentDescription = if (isListening) "Stop Recording" else "Start Recording"
+                            )
+                        }
+                    }
+                }
+
+                // Show real-time transcription while recording
+                if (isListening && transcriptionResult.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFE3F2FD)
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.Red
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Recording...",
+                                    color = Color.Red,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = transcriptionResult,
+                                color = Color.Black,
+                                fontSize = 14.sp,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                }
+
+                // Show transcription result after recording stops
+                if (!isListening && transcriptionResult.isNotEmpty() && !autoSendStt) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFE8F5E8)
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Transcription Complete",
+                                    color = Color.Green,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                TextButton(
+                                    onClick = {
+                                        prompt = transcriptionResult
+                                        sttVm.clearResults()
+                                    }
+                                ) {
+                                    Text(
+                                        text = "Use as Message",
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = transcriptionResult,
+                                color = Color.Black,
+                                fontSize = 14.sp,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = {
+                            if (prompt.isNotBlank()) {
+                                // Send to chat
+                                vm.sendPrompt(prompt)
+
+                                // Execute AI command silently if enabled
+                                if (aiExecutionEnabled && aiAssistantManager != null) {
+                                    executeAICommandSilently(
+                                        prompt,
+                                        aiAssistantManager,
+                                        vm,
+                                        { isExecutingAI = it }
+                                    )
+                                }
+
+                                prompt = ""
+                            }
+                        },
+                        enabled = prompt.isNotBlank() && !isLoading && !isExecutingAI,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        if (isLoading || isExecutingAI) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text(
+                            if (isLoading) "Sending..." else "Send",
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Model Selection Dialog
+    if (showModelSelector) {
+        AlertDialog(
+            onDismissRequest = { showModelSelector = false },
+            title = { Text("Select Model", color = Color.Black) },
+            text = {
+                Column {
+                    listOf("gemma3n:e2b", "llama3.2", "mistral", "codellama").forEach { model ->
+                        TextButton(
+                            onClick = {
+                                vm.setModel(model)
+                                showModelSelector = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = model,
+                                color = if (selectedModel == model) MaterialTheme.colorScheme.primary else Color.Black
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showModelSelector = false }) {
+                    Text("Cancel", color = Color.Black)
+                }
+            }
+        )
+    }
+
+    // Clear Chat Dialog
+    if (showClearChatDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearChatDialog = false },
+            title = { Text("Clear Chat", color = Color.Black) },
+            text = { Text("Are you sure you want to clear all chat messages?", color = Color.Black) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.clearChat()
+                        showClearChatDialog = false
+                    }
+                ) {
+                    Text("Clear", color = Color.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearChatDialog = false }) {
+                    Text("Cancel", color = Color.Black)
+                }
+            }
+        )
+    }
+
+    // STT Confirmation Dialog
+    if (showSttConfirmation) {
+        AlertDialog(
+            onDismissRequest = {
+                showSttConfirmation = false
+                pendingTranscription = ""
+            },
+            title = { Text("Speech Detected", color = Color.Black) },
+            text = {
+                Column {
                     Text(
-                        text = "The AI Assistant Manager is not initialized. Only chat mode will work.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Black
+                        text = "You said:",
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = pendingTranscription,
+                        color = Color.Black,
+                        fontSize = 16.sp
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Would you like to send this message to the AI?",
+                        color = Color.Gray,
+                        fontSize = 14.sp
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        prompt = pendingTranscription
+                        showSttConfirmation = false
+                        pendingTranscription = ""
+                    }
+                ) {
+                    Text("Use as Message", color = MaterialTheme.colorScheme.primary)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showSttConfirmation = false
+                        pendingTranscription = ""
+                    }
+                ) {
+                    Text("Cancel", color = Color.Black)
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun ChatMessageItem(
+    message: ChatMessage,
+    isStreaming: Boolean = false
+) {
+    val isUser = message.isUser
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+    ) {
+        Card(
+            modifier = Modifier.widthIn(max = 280.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isUser) MaterialTheme.colorScheme.primary else Color.White
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            shape = RoundedCornerShape(
+                topStart = 16.dp,
+                topEnd = 16.dp,
+                bottomStart = if (isUser) 16.dp else 4.dp,
+                bottomEnd = if (isUser) 4.dp else 16.dp
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp)
+            ) {
+                if (message.content.isNotEmpty()) {
+                    Text(
+                        text = message.content,
+                        color = if (isUser) Color.White else Color.Black,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp
+                    )
+                }
+
+                if (!isUser && message.model.isNotEmpty()) {
+                    if (message.content.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                    Text(
+                        text = "via ${message.model}",
+                        color = if (isUser) Color.White.copy(alpha = 0.7f) else Color.Gray,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Light
+                    )
+                }
+
+                if (isStreaming) {
+                    if (message.content.isNotEmpty() || (!isUser && message.model.isNotEmpty())) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Streaming...",
+                            color = Color.Gray,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Light
+                        )
+                    }
                 }
             }
         }

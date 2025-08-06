@@ -2,6 +2,7 @@ package com.voiceassistant.ui.screens
 
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,7 +28,8 @@ fun SettingsScreen(
     onVoiceLanguageClick: () -> Unit = {},
     onThemeClick: () -> Unit = {},
     onWakeWordClick: () -> Unit = {},
-    onFontSizeClick: () -> Unit = {}
+    onFontSizeClick: () -> Unit = {},
+    onServerConfigClick: () -> Unit = {}
 ) {
     var highContrastMode by remember { mutableStateOf(false) }
     var voiceFeedback by remember { mutableStateOf(true) }
@@ -142,6 +144,17 @@ fun SettingsScreen(
                         onCheckedChange = { hapticFeedback = it }
                     )
                 }
+
+                // Section Server Configuration
+                SettingsSection(title = "Server Configuration") {
+                    SettingsItem(
+                        title = "Ollama Server URL",
+                        value = "Configure",
+                        description = "Set the IP address of your Ollama server",
+                        onClick = onServerConfigClick,
+                        showArrow = true
+                    )
+                }
             }
         }
     }
@@ -187,7 +200,8 @@ fun SettingsItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 8.dp)
+            .clickable { onClick() },
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {

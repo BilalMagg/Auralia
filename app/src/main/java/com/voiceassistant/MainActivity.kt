@@ -36,6 +36,9 @@ import com.voiceassistant.ui.screens.HistoryScreen
 import com.voiceassistant.ui.screens.VoiceCommand
 import com.voiceassistant.ui.screens.LlamaScreen
 import com.voiceassistant.ui.screens.AgentScreen
+import com.voiceassistant.ui.screens.SpeechToTextScreen
+import com.voiceassistant.ui.screens.ServerConfigScreen
+import com.voiceassistant.ui.screens.ImageAnalysisScreen
 import com.voiceassistant.accessibility.VoiceAssistantAccessibilityService
 import com.voiceassistant.ai.AIAssistantManager
 import com.voiceassistant.repository.LlamaRepository
@@ -91,7 +94,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             onProfileClick = { handleProfileClick() },
                             onTestClick = { testSimpleClick() },
                             onLlamaClick = { handleLlamaClick() },
-                            onAgentClick = { handleAgentClick() }
+                            onAgentClick = { handleAgentClick() },
+                            onSpeechToTextClick = { handleSpeechToTextClick() },
+                            onImageAnalysisClick = { handleImageAnalysisClick() }
                         )
                     }
 
@@ -105,7 +110,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             onVoiceLanguageClick = { handleVoiceLanguageChange() },
                             onThemeClick = { handleThemeChange() },
                             onWakeWordClick = { handleWakeWordChange() },
-                            onFontSizeClick = { handleFontSizeChange() }
+                            onFontSizeClick = { handleFontSizeChange() },
+                            onServerConfigClick = { handleServerConfigClick() }
                         )
                     }
 
@@ -147,6 +153,33 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                             }
                         )
                     }
+                    "speechToText" -> {
+                        SpeechToTextScreen(
+                            onBackClick = {
+                                currentScreen = "main"
+                                speakText("Returning to main screen")
+                            },
+                            onTranscriptionComplete = { transcription ->
+                                speakText("Transcription completed: $transcription")
+                            }
+                        )
+                    }
+                    "serverConfig" -> {
+                        ServerConfigScreen(
+                            onBackClick = {
+                                currentScreen = "settings"
+                                speakText("Returning to settings")
+                            }
+                        )
+                    }
+                    "imageAnalysis" -> {
+                        ImageAnalysisScreen(
+                            onBackClick = {
+                                currentScreen = "main"
+                                speakText("Returning to main screen")
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -168,7 +201,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             Manifest.permission.SEND_SMS,
             Manifest.permission.CALL_PHONE,
             Manifest.permission.READ_CONTACTS,
-            Manifest.permission.WRITE_CONTACTS
+            Manifest.permission.WRITE_CONTACTS,
+            Manifest.permission.CAMERA,
+            Manifest.permission.READ_EXTERNAL_STORAGE
         )
 
         // Ajouter les permissions de stockage selon la version Android
@@ -353,6 +388,21 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         speakText("Opening Voice Agent")
 
         processAICommand("take a screenshot")
+    }
+
+    private fun handleSpeechToTextClick() {
+        currentScreen = "speechToText"
+        speakText("Opening Speech to Text")
+    }
+
+    private fun handleServerConfigClick() {
+        currentScreen = "serverConfig"
+        speakText("Opening server configuration")
+    }
+
+    private fun handleImageAnalysisClick() {
+        currentScreen = "imageAnalysis"
+        speakText("Opening image analysis")
     }
 
     // Test function to trigger mock accessibility automation

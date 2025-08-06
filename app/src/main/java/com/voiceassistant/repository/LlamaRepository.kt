@@ -45,13 +45,13 @@ class LlamaRepository {
             Log.d("LlamaRepository", "Sending streaming request to Ollama with prompt: $prompt")
             val request = LlamaRequest(model = model, prompt = prompt, stream = true)
             val response = api.generateStream(request)
-            
+
             if (response.isSuccessful) {
                 val responseBody = response.body()
                 if (responseBody != null) {
                     val source = responseBody.source()
                     var fullResponse = ""
-                    
+
                     Log.d("LlamaRepository", "Starting to read streaming response")
                     while (!source.exhausted()) {
                         val line = source.readUtf8Line()
@@ -61,7 +61,7 @@ class LlamaRepository {
                                 val llamaResponse = gson.fromJson(line, LlamaResponse::class.java)
                                 fullResponse += llamaResponse.response
                                 emit(fullResponse)
-                                
+
                                 if (llamaResponse.done) {
                                     Log.d("LlamaRepository", "Streaming completed")
                                     break
@@ -109,19 +109,6 @@ class LlamaRepository {
             else -> {
                 Exception("Network error: ${e.message}")
             }
-        }
-    }
-    fun isModelLoaded(): Boolean {
-        // Pour l'instant, retourne true - vous pouvez implémenter une vraie vérification plus tard
-        return true
-    }
-    suspend fun checkConnection(): Boolean {
-        return try {
-            val testResponse = getResponse("test", "gemma3n:e2b", false)
-            testResponse.isNotEmpty()
-        } catch (e: Exception) {
-            Log.w("LlamaRepository", "Connection check failed: ${e.message}")
-            false
         }
     }
 }
