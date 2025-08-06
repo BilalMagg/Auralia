@@ -26,7 +26,7 @@
 
 ### 🎯 Project Goals
 
-- **Visual-AI powered** voice assistant with "Hey Aura" wake word
+- **Visual-AI powered** voice assistant with future wake word support
 - **Seamless hands-free experience** (no clicks needed)
 - **Screenshot-based context understanding** using LLaVA
 - **Intelligent command processing** with Gemma 3n
@@ -36,21 +36,22 @@
 
 ## ✨ Implemented Features
 
-### 🎤 Wake Word Detection
-- **"Hey Aura"** wake word using Porcupine
-- **Real-time detection** with audio processing
-- **Background service** for continuous listening
-- **Automatic transition** to command mode (no clicks needed)
-- **Seamless hands-free experience**
-- **Visual feedback** during detection
-- **Fallback mode** if Porcupine fails
+### 🎤 Voice Activation
+- **Manual activation** through app interface
+- **Voice command recognition** after activation
+- **Real-time speech processing**
+- **Background service** for continuous operation
+- **Visual feedback** during processing
+- **Error handling** for recognition failures
 
 ### 🗣️ Speech Recognition
 - **Android SpeechRecognizer** for voice input
 - **Offline capability** depending on device
 - **Multi-language support** (system default)
 - **Real-time transcription** with feedback
+- **Partial results** for immediate feedback
 - **Error handling** for recognition failures
+- **Configurable silence timeouts**
 
 ### 📸 Visual-AI Command Processing
 - **Automatic screenshot capture** when command is given
@@ -109,14 +110,13 @@
 ### 🎯 Visual-AI Command Processing Workflow
 
 ```
-1. User says "Hey Aura" → Wake word detection
-2. Automatically transitions to command mode (no clicks needed)
-3. User gives command → Speech recognition
-4. App takes screenshot → Screen capture
-5. LLaVA analyzes screenshot → Visual context understanding
-6. Command + visual context sent to Gemma 3n → Intelligent processing
-7. Gemma 3n executes task → Task automation
-8. Voice feedback → Text-to-speech response
+1. User activates voice assistant → Manual activation
+2. User gives command → Speech recognition (Android SpeechRecognizer)
+3. App takes screenshot → Screen capture
+4. LLaVA analyzes screenshot → Visual context understanding
+5. Command + visual context sent to Gemma 3n → Intelligent processing
+6. Gemma 3n executes task → Task automation
+7. Voice feedback → Text-to-speech response
 ```
 
 ### 📱 Example Use Cases
@@ -156,7 +156,7 @@
 ### 🔄 Real-time Processing
 
 - **Instant screenshot capture** when command is detected
-- **Automatic wake word to command transition** (no user interaction)
+- **Manual activation** to command mode
 - **Parallel processing** of LLaVA and Gemma 3n
 - **Streaming responses** for immediate feedback
 - **Error recovery** if AI models fail
@@ -216,7 +216,6 @@ app/src/main/java/com/voiceassistant/
 | **Visual AI** | LLaVA (Ollama) | - |
 | **Text AI** | Gemma 3n (Ollama) | - |
 | **Speech Recognition** | Android SpeechRecognizer | Native |
-| **Wake Word** | Porcupine | 3.0.1 |
 | **Network** | Retrofit + OkHttp | 2.9.0 |
 | **Images** | Coil | 2.5.0 |
 
@@ -309,13 +308,6 @@ The application automatically requests the following permissions:
 4. **Enter server URL** : `http://YOUR_IP:11434/`
 5. **Save configuration**
 
-### Wake Word Configuration
-
-The application uses **"Hey Gemma"** as wake word:
-- **Automatic activation** upon detection
-- **Visual and audio feedback**
-- **Configuration** through Compose interface
-
 ## 📱 Usage
 
 ### 🎤 Voice Activation and Commands
@@ -323,9 +315,8 @@ The application uses **"Hey Gemma"** as wake word:
 1. **Launch the application**
 2. **Grant requested permissions**
 3. **Enable accessibility service** (recommended)
-4. **Say "Hey Aura"** to activate the assistant
-5. **Automatically transitions to command mode** (no clicks needed)
-6. **Give commands** with visual context:
+4. **Activate voice assistant** through app interface
+5. **Give commands** with visual context:
    - "Set alarm at 6 PM" (while on clock app)
    - "Search for Android development" (while on browser)
    - "Open settings" (from any screen)
@@ -461,9 +452,10 @@ Log.e("Auralia", "Error", exception)
 
 #### Common Issues
 
-1. **Wake word not working**
+1. **Voice activation not working**
    - Check microphone permissions
-   - Verify Porcupine is properly configured
+   - Verify app permissions are granted
+   - Test with "Test Connection" button
 
 2. **Ollama connection error**
    - Verify Ollama server is running
@@ -553,6 +545,30 @@ class CommandProcessor {
 
 ### 🚀 High Priority Features
 
+#### Wake Word System
+- [ ] **Porcupine integration** for wake word detection
+- [ ] **Customizable wake word** (Hey Aura, Hey Assistant, etc.)
+- [ ] **Real-time wake word detection** with audio processing
+- [ ] **Background service** for continuous listening
+- [ ] **Automatic transition** to command mode (no clicks needed)
+- [ ] **Seamless hands-free experience**
+- [ ] **Visual feedback** during detection
+- [ ] **Fallback mode** if wake word detection fails
+
+#### Enhanced Wake Word Features
+- [ ] **Custom wake word creation** through app interface
+- [ ] **Multiple wake words** support (Hey Aura, Hey Assistant, etc.)
+- [ ] **Wake word training** for personal voice
+- [ ] **Wake word sensitivity** adjustment
+- [ ] **Wake word analytics** and usage statistics
+
+#### Advanced Language Support
+- [ ] **Multi-language wake words** (Hey Aura, Bonjour Aura, Hola Aura)
+- [ ] **Automatic language detection** based on speech
+- [ ] **Language-specific commands** and responses
+- [ ] **Translation capabilities** for commands
+- [ ] **Regional accent support** for better recognition
+
 #### Enhanced Visual-AI
 - [ ] **Multi-screen analysis** for complex tasks
 - [ ] **Gesture recognition** from screenshots
@@ -630,12 +646,17 @@ class CommandProcessor {
 ### 📋 Implementation Roadmap
 
 #### Phase 1 (Next 3 months)
+- [ ] Wake word system implementation (Porcupine)
+- [ ] Custom wake word configuration
+- [ ] Multi-language wake word support
 - [ ] Enhanced visual context understanding
 - [ ] Improved Gemma 3n integration
 - [ ] Better error handling for AI models
 - [ ] Performance optimizations
 
 #### Phase 2 (3-6 months)
+- [ ] Wake word training interface
+- [ ] Advanced language detection
 - [ ] Multi-screen analysis capabilities
 - [ ] Advanced task automation
 - [ ] Security enhancements
@@ -665,7 +686,6 @@ This project is licensed under MIT. See the [LICENSE](LICENSE) file for details.
 - **Google Gemma** for text processing capabilities
 - **LLaVA** for visual understanding
 - **Android SpeechRecognizer** for native speech recognition
-- **Picovoice** for wake word detection
 - **Jetpack Compose** for modern interface
 - **The Android community** for tools and libraries
 
