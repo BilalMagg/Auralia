@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 
 class OllamaApiClient {
     // IP du serveur Ollama - changez cette valeur selon votre configuration
-    private val baseUrl = "http://192.168.1.6:11434/"
+    private val baseUrl = "http://192.168.1.116:11434/"
     
     // URLs alternatives pour tester différentes configurations
     private val alternativeUrls = listOf(
@@ -30,7 +30,7 @@ class OllamaApiClient {
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(loggingInterceptor)
         .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
     
@@ -71,7 +71,7 @@ class OllamaApiClient {
                 model = "llava",
                 prompt = prompt,
                 images = listOf(imageBase64),
-                stream = true
+                stream = false
             )
             
             val response = apiService.analyzeImageStream(request)
