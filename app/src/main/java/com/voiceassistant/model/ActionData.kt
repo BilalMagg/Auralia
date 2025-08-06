@@ -10,7 +10,9 @@ data class ActionData(
     val text: String? = null,
     val direction: String? = null,
     val milliseconds: Long? = null,
-    val packageName: String? = null
+    val packageName: String? = null,
+    val hour: Int? = null,
+    val minute: Int? = null
 )
 
 @Serializable
