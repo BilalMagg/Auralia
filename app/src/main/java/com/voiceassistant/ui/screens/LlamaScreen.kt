@@ -1,4 +1,4 @@
-// LlamaScreen.kt
+// LlamaScreen.kt - Version complète finale
 package com.voiceassistant.ui.screens
 
 import androidx.compose.foundation.background
@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -25,11 +27,13 @@ import com.voiceassistant.viewmodel.LlamaViewModel
 import com.voiceassistant.viewmodel.SpeechToTextViewModel
 import com.voiceassistant.viewmodel.SpeechToTextEvent
 import kotlinx.coroutines.launch
+import com.voiceassistant.ai.AIAssistantManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LlamaScreen(
-    onBackClick: () -> Unit = {}
+    onBackClick: () -> Unit = {},
+    aiAssistantManager: AIAssistantManager? = null
 ) {
     val vm: LlamaViewModel = viewModel()
     val sttVm: SpeechToTextViewModel = viewModel()
@@ -105,6 +109,13 @@ fun LlamaScreen(
         showScrollToBottom = listState.firstVisibleItemIndex < chatMessages.size - 3
     }
 
+    // États pour les résultats IA
+    var aiExecutionResult by remember { mutableStateOf("") }
+    var generatedJsonText by remember { mutableStateOf("") }
+    var generatedActionsList by remember { mutableStateOf(listOf<String>()) }
+    var showResults by remember { mutableStateOf(false) }
+    var isExecuting by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -114,7 +125,7 @@ fun LlamaScreen(
         TopAppBar(
             title = {
                 Text(
-                    text = "Gemma 3N E2B Chat",
+                    text = "🤖 AI Assistant Chat",
                     style = MaterialTheme.typography.headlineSmall,
                     color = Color.Black,
                     fontWeight = FontWeight.Bold
@@ -207,6 +218,239 @@ fun LlamaScreen(
                     Switch(
                         checked = autoSendStt,
                         onCheckedChange = { autoSendStt = it }
+                    )
+                }
+            }
+        }
+
+        // AI Execution Section (if AI Assistant is available)
+        if (aiAssistantManager != null) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "🧠 AI Execution Mode",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                    Text(
+                        text = "AI analyzes your request and executes actions automatically.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Black
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Try: 'visit google.com', 'calculate 25×67', 'turn on airplane mode'",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // AI Execution Button
+                    Button(
+                        onClick = {
+                            if (prompt.isNotBlank()) {
+                                isExecuting = true
+                                showResults = false
+
+                                // Reset previous results
+                                aiExecutionResult = ""
+                                generatedJsonText = ""
+                                generatedActionsList = emptyList()
+
+                                // Send to model for chat response
+                                vm.sendPrompt(prompt)
+                                
+                                // Execute with AI and capture REAL details
+                                try {
+                                    aiAssistantManager.processVoiceCommandWithDetails(prompt) { success, message, realJson, realActions ->
+                                        aiExecutionResult = if (success) {
+                                            "✅ Success: $message"
+                                        } else {
+                                            "❌ Error: $message"
+                                        }
+
+                                        generatedJsonText = realJson
+                                        generatedActionsList = realActions
+                                        showResults = true
+                                        isExecuting = false
+                                    }
+                                } catch (e: Exception) {
+                                    // Fallback to simple method if detailed doesn't exist
+                                    aiAssistantManager.processVoiceCommand(prompt) { success, message ->
+                                        aiExecutionResult = if (success) {
+                                            "✅ Success: $message"
+                                        } else {
+                                            "❌ Error: $message"
+                                        }
+
+                                        generatedJsonText = "JSON capture not available in simple mode"
+                                        generatedActionsList = listOf("Action details not available - using simple mode")
+                                        showResults = true
+                                        isExecuting = false
+                                    }
+                                }
+                            }
+                        },
+                        enabled = prompt.isNotBlank() && !isLoading && !isExecuting,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isExecuting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text(
+                            if (isExecuting) "🧠 AI is executing..." else "🚀 Execute with AI"
+                        )
+                    }
+                }
+            }
+
+            // AI Results Section
+            if (showResults) {
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Execution Result
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (aiExecutionResult.startsWith("✅"))
+                            MaterialTheme.colorScheme.primaryContainer
+                        else
+                            MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "🤖 AI Execution Result:",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = aiExecutionResult,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Black
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Generated JSON & Actions
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "🧠 AI Analysis & Actions",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Raw JSON from AI
+                        Text(
+                            text = "📋 Raw AI Response:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.Black
+                        )
+
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color.Black
+                            )
+                        ) {
+                            Text(
+                                text = generatedJsonText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Green,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Generated Actions
+                        Text(
+                            text = "🎬 AI Generated Actions (${generatedActionsList.size}):",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.Black
+                        )
+
+                        if (generatedActionsList.isNotEmpty()) {
+                            generatedActionsList.forEachIndexed { index, action ->
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "${index + 1}. $action",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(8.dp),
+                                        color = Color.Black
+                                    )
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "No actions generated",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            // Warning when AI Assistant is not available
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "⚠️ AI Assistant Not Available",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                    Text(
+                        text = "The AI Assistant Manager is not initialized. Only chat mode will work.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Black
                     )
                 }
             }

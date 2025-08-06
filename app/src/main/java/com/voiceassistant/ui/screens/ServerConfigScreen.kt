@@ -19,21 +19,21 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.voiceassistant.viewmodel.LlamaViewModel
+import androidx.compose.ui.platform.LocalContext
+import com.voiceassistant.config.NetworkConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerConfigScreen(
-    onBackClick: () -> Unit = {},
-    viewModel: LlamaViewModel = viewModel()
+    onBackClick: () -> Unit = {}
 ) {
-    var serverUrl by remember { mutableStateOf(viewModel.getCurrentServerUrl()) }
+    val context = LocalContext.current
+    var serverUrl by remember { mutableStateOf(NetworkConfig.getOllamaUrl(context)) }
     var showResetDialog by remember { mutableStateOf(false) }
     var showSuccessMessage by remember { mutableStateOf(false) }
     
     LaunchedEffect(Unit) {
-        serverUrl = viewModel.getCurrentServerUrl()
+        serverUrl = NetworkConfig.getOllamaUrl(context)
     }
 
     Box(
@@ -186,14 +186,14 @@ fun ServerConfigScreen(
                                     fontSize = 14.sp
                                 )
                                 Text(
-                                    text = viewModel.getCurrentServerUrl(),
+                                    text = NetworkConfig.getOllamaUrl(context),
                                     color = Color.White,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Medium
                                 )
                             }
                             
-                            if (viewModel.isUsingCustomUrl()) {
+                            if (NetworkConfig.isUsingCustomUrl(context)) {
                                 Text(
                                     text = "Custom",
                                     color = Color(0xFF6C5CE7),
@@ -217,7 +217,7 @@ fun ServerConfigScreen(
                 ) {
                     Button(
                         onClick = {
-                            viewModel.updateServerUrl(serverUrl)
+                            NetworkConfig.setOllamaUrl(context, serverUrl)
                             showSuccessMessage = true
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -294,8 +294,8 @@ fun ServerConfigScreen(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            viewModel.resetToDefaultUrl()
-                            serverUrl = viewModel.getCurrentServerUrl()
+                            NetworkConfig.resetToDefault(context)
+                            serverUrl = NetworkConfig.getOllamaUrl(context)
                             showResetDialog = false
                             showSuccessMessage = true
                         }

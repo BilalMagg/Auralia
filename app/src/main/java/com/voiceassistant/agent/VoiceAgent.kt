@@ -18,7 +18,7 @@ class VoiceAgent(
     private val modelUrl: String = "http://192.168.1.116:11434/",
     private val modelName: String = "gemma3n:e2b"
 ) {
-    private val repository = LlamaRepository(context)
+    private val repository = LlamaRepository()
     private val parser = ActionParser()
     private var actionExecutor: ActionExecutor? = null
     

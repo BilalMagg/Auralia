@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class LlamaViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = LlamaRepository(application)
+    private val repository = LlamaRepository()
 
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val chatMessages = _chatMessages.asStateFlow()
@@ -111,33 +111,5 @@ class LlamaViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setModel(model: String) {
         _selectedModel.value = model
-    }
-    
-    /**
-     * Update the Ollama server URL
-     */
-    fun updateServerUrl(newUrl: String) {
-        repository.updateServerUrl(newUrl)
-    }
-    
-    /**
-     * Get current server URL
-     */
-    fun getCurrentServerUrl(): String {
-        return repository.getCurrentServerUrl()
-    }
-    
-    /**
-     * Reset to default server URL
-     */
-    fun resetToDefaultUrl() {
-        repository.resetToDefaultUrl()
-    }
-    
-    /**
-     * Check if using custom URL
-     */
-    fun isUsingCustomUrl(): Boolean {
-        return repository.isUsingCustomUrl()
     }
 }
